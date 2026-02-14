@@ -94,7 +94,7 @@ pip install -r requirements-local.txt
 |-------|-------------|--------|
 | 1 | Local VS Code Setup | ✅ Complete |
 | 2 | Google Colab + Drive Setup | ✅ Complete |
-| 3 | Dataset Download and Verification | ⏳ Pending |
+| 3 | Dataset Download and Verification | ✅ Complete |
 | 4 | Preprocessing Pipeline | ⏳ Pending |
 | 5 | YOLOv8 Detection Training | ⏳ Pending |
 | 6 | U-Net Segmentation Training | ⏳ Pending |
