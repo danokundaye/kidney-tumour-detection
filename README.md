@@ -1,10 +1,10 @@
 # Hybrid YOLO-UNet Architecture for Kidney Tumour Detection, Segmentation, and Classification
 
 **Author:** Daniel Osaseri Okundaye  
-**Institution:** MIVA Open University, Abuja, Nigeria  
+**Institution:** Miva Open University, Abuja, Nigeria  
 **Supervisor:** Isiekwene Chinyere Chioma  
 **Degree:** B.Sc. (Hons) Computer Science  
-**Year:** 2025  
+**Year:** 2026
 
 
 ## Project Overview
