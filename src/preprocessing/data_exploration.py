@@ -62,7 +62,7 @@ def check_integrity(dataset_root: str) -> pd.DataFrame:
             "imaging_exists"       : imaging_path.exists(),
             "segmentation_exists"  : seg_path.exists(),
             "imaging_loadable"     : False,
-            "seg_loadable"         : False,
+            "segmentation_loadable": False,
             "num_slices"           : None,
             "height"               : None,
             "width"                : None,
@@ -80,7 +80,7 @@ def check_integrity(dataset_root: str) -> pd.DataFrame:
                 seg_shape = seg.header.get_data_shape()
 
                 row["imaging_loadable"] = True
-                row["seg_loadable"] = True
+                row["segmentation_loadable"] = True
 
 
                 # Get NIfTI shape
