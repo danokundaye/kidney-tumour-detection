@@ -57,16 +57,16 @@ def check_integrity(dataset_root: str) -> pd.DataFrame:
         seg_path = case_dir / "aggregated_MAJ_seg.nii.gz"
 
         row = {
-            "case id": case_id,
-            "folder exists": case_dir.exists(),
-            "imaging exists": imaging_path.exists(),
-            "segmentation exists": seg_path.exists(),
-            "imaging_loadble": False,
-            "segmentation_loadble": False,
-            "num_slices": None,
-            "height": None,
-            "width": None,
-            "error": None
+            "case_id"              : case_id,
+            "folder_exists"        : case_dir.exists(),
+            "imaging_exists"       : imaging_path.exists(),
+            "segmentation_exists"  : seg_path.exists(),
+            "imaging_loadable"     : False,
+            "seg_loadable"         : False,
+            "num_slices"           : None,
+            "height"               : None,
+            "width"                : None,
+            "error"                : None
         }
 
         # Only attempt to load if file exists
