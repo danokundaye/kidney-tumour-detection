@@ -15,10 +15,20 @@ This project implements a three-stage deep learning pipeline for automated detec
 
 | Stage | Model | Task | Target Metric |
 |-------|-------|------|---------------|
-| 1 | YOLOv8 | Kidney region detection | Sensitivity >90% |
-| 2 | 3D U-Net + ResNet50 | Tumour segmentation | Dice ≥0.80 |
+| 1 | YOLOv8 | Kidney region detection | Sensitivity >90% & Precision >85% |
+| 2 | 3D U-Net + ResNet50 | Tumour segmentation | Dice ≥0.80 & IoU ≥0.75 |
 | 3 | EfficientNet-B0 | Benign/malignant classification | Accuracy >85% |
 | Post | SHAP | Explainability | Visual attribution maps |
+
+## Technical Stack
+- Python 3.11.9
+- PyTorch 2.0+
+- Ultralytics YOLOv8
+- segmentation_models_pytorch
+- MONAI
+- EfficientNet-B0 (ImageNet pretrained, fine-tuned on KiTS21)
+- SHAP
+
 
 ### Dataset
 - **KiTS21** (Kidney Tumour Segmentation Challenge 2021)
@@ -26,6 +36,10 @@ This project implements a three-stage deep learning pipeline for automated detec
 - NIfTI format, 512×512 pixels per slice
 - Patient-level split: 110 (detection) / 120 (segmentation) / 
   70 (testing)
+
+**Hardware:**
+- Local: Intel Core i7 (11th gen), 8GB RAM — code writing and testing
+- Cloud: Google Colab Pro+ with NVIDIA A100 (40GB VRAM) — training
 
 ---
 
@@ -47,15 +61,18 @@ kidney-tumour-detection/
 │   ├── explainability/      # SHAP integration
 │   └── evaluation/          # Metrics and reporting
 │
-├── configs/                 # Training configuration files
-├── outputs/                 # Predictions and visualizations
-├── checkpoints/             # Saved model weights
-├── logs/                    # Training logs and CSV metrics
+├── configs/
+│   └── config.yaml          # All paths and hyperparameters
+│
+├── outputs/                 # Gitignored - results saved to Drive
+│   ├── logs/
+│   ├── metrics/
+│   └── checkpoints/
+│
 ├── tests/                   # Module verification scripts
 ├── requirements-local.txt   # Local development dependencies
-└── requirements-colab.txt   # Colab training dependencies (Phase 2)
+└── requirements-colab.txt   # Colab training dependencies
 ```
-
 ---
 
 ## Local Development Setup
@@ -69,6 +86,7 @@ These steps are intended to set up local machine for preprocessing and code edit
 
 ### Steps
 
+### Phase 1: Local Setup
 **1. Clone the repository**
 ```bash
 git clone https://github.com/danokundaye/kidney-tumour-detection.git
@@ -85,6 +103,50 @@ source venv/Scripts/activate    # GitBash on Windows
 ```bash
 pip install -r requirements-local.txt
 ```
+---
+
+### Phase 2: Google Colab + Drive Setup
+Sets up the cloud environment where all model training runs.
+
+**1. Activate Google One Premium**
+
+**2. Open the Colab notebook**
+```
+notebooks/kidney_tumour_pipeline.ipynb
+```
+**3. At the start of every new Colab session, run Cell 0 first**
+```python
+# Cell 0 handles: Drive mount, kits21 clone,
+# package install, and TRAINING_DIR redirect
+# Takes approximately 2-3 minutes
+```
+---
+
+### Phase 3: Dataset Download and Verification
+
+Downloads and verifies all 300 KiTS21 cases to Google Drive.
+
+**1. Clone KiTS21 repository to Colab**
+```bash
+git clone https://github.com/neheller/kits21.git /content/kits21
+```
+
+**2. Redirect TRAINING_DIR to Google Drive**
+```python
+# Handled automatically by Cell 0
+```
+
+**3. Download all 300 cases (~30GB)**
+```python
+from kits21.api.data import fetch_training_data
+fetch_training_data()
+```
+
+**4. Verify dataset on Drive**
+```
+dataset/raw/case_00000/ through case_00299/
+Each case contains: imaging.nii.gz + segmentation.nii.gz
+```
 
 ---
 
@@ -95,7 +157,7 @@ pip install -r requirements-local.txt
 | 1 | Local VS Code Setup | ✅ Complete |
 | 2 | Google Colab + Drive Setup | ✅ Complete |
 | 3 | Dataset Download and Verification | ✅ Complete |
-| 4 | Preprocessing Pipeline | ⏳ Pending |
+| 4 | Preprocessing Pipeline | 🔄 In Progress |
 | 5 | YOLOv8 Detection Training | ⏳ Pending |
 | 6 | U-Net Segmentation Training | ⏳ Pending |
 | 7 | EfficientNet Classification Training | ⏳ Pending |

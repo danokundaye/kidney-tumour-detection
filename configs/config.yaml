@@ -1,0 +1,97 @@
+# Central configuration file for the Kidney Tumour Detection Pipeline
+# All paths, splits, and hyperparameters are defined here.
+
+# Update paths to match Google Drive structure before configuring others
+paths:
+  # Root folder where KiTS21 data resides
+  dataset_root: "/content/drive/MyDrive/kidney_tumour_project/dataset/raw"
+
+  # Where processed and output data will go
+  processed_root: "/content/drive/MyDrive/kidney_tumour_project/dataset/processed"
+
+  # Subfolders that will be created during preprocessing
+  splits_dir: "/content/drive/MyDrive/kidney_tumour_project/dataset/processed/splits"
+  slices_dir: "/content/drive/MyDrive/kidney_tumour_project/dataset/processed/slices"
+  yolo_labels_dir: "/content/drive/MyDrive/kidney_tumour_project/dataset/processed/yolo_labels"
+  unet_crops_dir: "/content/drive/MyDrive/kidney_tumour_project/dataset/processed/unet_crops"
+  patches_dir: "/content/drive/MyDrive/kidney_tumour_project/dataset/processed/patches"
+
+  # Logs and metrics (also on Drive so they persist after runtime session on Colab ends)
+  logs_dir: "/content/drive/MyDrive/kidney_tumour_project/outputs/logs"
+  metrics_dir: "/content/drive/MyDrive/kidney_tumour_project/outputs/metrics"
+  checkpoints_dir: "/content/drive/MyDrive/kidney_tumour_project/outputs/checkpoints"
+
+
+# Dataset Configuration: Splits and Labels
+dataset:
+  total_cases: 300
+  random_seed: 42           # Fixed seed ensures reproducible splits every time
+
+  # Patient-level split sizes
+  detection_train_cases: 110
+  segmentation_train_cases: 120
+  test_cases: 70
+
+  # KiTS21 segmentation label values
+  labels:
+    background: 0
+    kidney: 1
+    tumour: 2
+    cyst: 3
+  
+
+# Preprocessing Techniques
+preprocessing:
+  # CT windowing for abdominal scans
+  # Note: CT scans store raw Hounsfield Unit (HU) values that range from around -1000 to +3000.
+  # Standard abdominal window used in kidney radiology (distinguishable)
+  ct_window_min: -79
+  ct_window_max: 304
+
+  # Output slice dimensions
+  slice_size: 512           # Original resolution + YOLO
+
+  # Bounding box 20% expansion margin 
+  bbox_margin: 0.20
+
+  # Input dimensions for each stage
+  unet_input_size: 254
+  efficientnet_input_size: 224
+
+  # Minimum tumor area to be considered valid (in pixels)
+  # Filters out annotation noise/tiny artifacts
+  min_tumor_area: 100
+
+
+# Augmentation Techniques
+augmentation:
+  horizontal_flip_prob: 0.5
+  rotation_limit: 15        # degrees
+  brightness_limit: 0.20
+  contrast_limit: 0.20
+  gaussian_noise_limit: 0.01
+  scale_limit: 0.10         # 0.9x to 1.1x
+
+# Model Hyperparameters (this is filled during the training phases)
+yolov8:
+  epochs: 100
+  batch_size: 16
+  learning_rate: 0.001
+  confidence_threshold: 0.5
+  iou_threshold: 0.5
+  imgsz: 512
+
+unet:
+  epochs: 150
+  batch_size: 8
+  learning_rate: 0.0001
+  val_frequency: 5          # Validate every 5 epochs
+  segmentation_threshold: 0.5
+
+efficientnet:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.0001
+  classification_threshold: 0.5
+  patience: 5               # Epochs before reducing LR on plateau
+

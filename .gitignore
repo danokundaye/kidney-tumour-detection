@@ -229,4 +229,7 @@ logs/
 
 # OS files
 .DS_Store
-Thumbs.db
+Thumbs.dboutputs/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
