@@ -54,7 +54,7 @@ def check_integrity(dataset_root: str) -> pd.DataFrame:
     for case_id in tqdm(case_ids, desc="Checking cases..."):
         case_dir = dataset_root / case_id
         imaging_path = case_dir / "imaging.nii.gz"
-        seg_path = case_dir / "segmentation.nii.gz"
+        seg_path = case_dir / "aggregated_MAJ_seg.nii.gz"
 
         row = {
             "case id": case_id,
@@ -245,7 +245,7 @@ def analyse_seg_labels(
     label_results = []
 
     for case_id in tqdm(sampled_cases, desc="Analysing labels..."):
-        img_path = dataset_root / case_id / "segmentation.nii.gz"
+        img_path = dataset_root / case_id / "aggregated_MAJ_seg.nii.gz"
         seg_data = nib.load(str(img_path)).get_fdata().astype(np.uint8)
 
         unique_labels = np.unique(seg_data)
@@ -281,87 +281,56 @@ def analyse_seg_labels(
     return label_df
 
 # Histology Label Analysis
-def analyse_histology(dataset_root: str) -> pd.DataFrame:
+def analyse_histology_labels(dataset_root: Path, config: dict) -> dict:
     """
-    KiTS21 includes a JSON metadata file with clinical information per case.
-    This function reads it to find how many cases have confirmed histology
-    labels (benign vs malignant) — the training data for EfficientNet.
-
-    We don't know the exact number until we read this file.
-    """
-    print("\n" + "="*50)
-    print("Step 5: Histology Label Analysis")
-
-    dataset_root = Path(dataset_root)
-
-    # KiTS21 metadata JSON — check both possible locations
-    possible_json_paths = [
-        dataset_root / "kits21.json",
-        dataset_root / "data" / "kits21.json",
-        dataset_root.parent / "kits21.json",
-    ]
-
-    json_path = None
-    for path in possible_json_paths:
-        if path.exists():
-            json_path = path
-            break
-
-    if json_path is None:
-        print("KiTS21.json not found. Searched:")
-        for p in possible_json_paths:
-            print(f"{p}")
-        print("\nThis file contains histology labels for EfficientNet training.")
-        print("Check your Drive for where this file is located and update paths.")
-        return pd.DataFrame()
+    Analyze histology labels from kits.json saved on Drive.
     
-    print(f"Found metadata at: {json_path}")
-
-    with open(json_path, 'r') as f:
-        metadata = json.load(f)
-
-    print(f"\nTotal entries in JSON: {len(metadata)}")
-    print(f"\nSample entry keys: {list(metadata[0].keys()) if metadata else 'empty'}")
-
-    # Build DataFrame from metadata
-    rows = []
-    for entry in metadata:
-        row = {"case_id": entry.get("case_id", "unknown")}
-
-        # Look for histology-related fields
-        # We print all keys first so we can identify the right field name
-        for key, value in entry.items():
-            row[key] = value
-        rows.append(row)
-
-    meta_df = pd.DataFrame(rows)
-
-    # Find columns that likely contain histology information
-    histology_cols = [
-        col for col in meta_df.columns
-        if any(term in col.lower() for term in
-               ['histol', 
-                'malig', 
-                'benign', 
-                'tumour_type',
-                'pathol', 
-                'subtype', 
-                'label'])
-    ]
-
-    print(f"\nPotential histology-related columns found:")
-    if histology_cols:
-        for col in histology_cols:
-            print(f"\nColumn: '{col}'")
-            print(f"Unique values: {meta_df[col].unique()}")
-            print(f"Non-null count: {meta_df[col].notna().sum()} / {len(meta_df)}")
-    else:
-        print("None identified automatically.")
-        print("All available columns:")
-        for col in meta_df.columns:
-            print(f"  - {col}: {meta_df[col].nunique()} unique values")
-
-    return meta_df
+    Labels come from kits.json (downloaded from KiTS21 GitHub repo).
+    Key field: 'malignant' (True/False) per case.
+    """
+    print("\n" + "="*60)
+    print("STEP 5: HISTOLOGY LABEL ANALYSIS")
+    print("="*60)
+    
+    # Load kits.json from Drive (one level up from dataset/raw)
+    kits_json_path = dataset_root.parent / "kits.json"
+    
+    if not kits_json_path.exists():
+        print(f"ERROR: kits.json not found at {kits_json_path}")
+        print("Run the kits.json download cell first.")
+        return {}
+    
+    with open(kits_json_path, 'r') as f:
+        kits_data = json.load(f)
+    
+    print(f"Loaded kits.json: {len(kits_data)} cases")
+    
+    # Build lookup dict: case_id -> malignant label
+    label_lookup = {
+        entry['case_id']: entry.get('malignant', None)
+        for entry in kits_data
+    }
+    
+    # Count labels
+    malignant_count = sum(1 for v in label_lookup.values() if v is True)
+    benign_count    = sum(1 for v in label_lookup.values() if v is False)
+    missing_count   = sum(1 for v in label_lookup.values() if v is None)
+    
+    print(f"\nHistology label distribution:")
+    print(f" Malignant : {malignant_count}")
+    print(f" Benign    : {benign_count}")
+    print(f" Missing   : {missing_count}")
+    print(f" Total     : {len(label_lookup)}")
+    
+    results = {
+        'total_cases'      : len(label_lookup),
+        'malignant_count'  : malignant_count,
+        'benign_count'     : benign_count,
+        'missing_count'    : missing_count,
+        'label_lookup'     : label_lookup
+    }
+    
+    return results
 
 # Save Reports
 def save_reports(logs_dir: str,
