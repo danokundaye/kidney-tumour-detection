@@ -2,7 +2,7 @@
 #     - File integrity (are all cases present and loadable?)
 #     - Image dimensions and slice counts
 #     - CT intensity ranges (informs our normalization strategy)
-#     - Segmentation label distribution (kidney, tumor, cyst presence)
+#     - Segmentation label distribution (kidney, tumour, cyst presence)
 #     - Histology label availability (determines EfficientNet training size)
 #
 # Execution: Google Colab (data lives on Drive)
@@ -131,7 +131,7 @@ def analyse_slice_distribution(integrity_df: pd.DataFrame) -> None:
     """
     Analyze and visualize the distribution of slice counts across all cases.
     This matters because:
-    - Too few slices = risk of missing the tumor entirely
+    - Too few slices = risk of missing the tumour entirely
     - High variation = our pipeline must handle variable-length inputs
     """
     print("\n" + "="*50)
@@ -225,10 +225,10 @@ def analyse_seg_labels(
 ) -> pd.DataFrame:
     """
     For a sample of cases, check which segmentation labels are present.
-    KiTS21 labels: 0=background, 1=kidney, 2=tumor, 3=cyst
+    KiTS21 labels: 0=background, 1=kidney, 2=tumour, 3=cyst
 
     This tells us:
-    - What fraction of cases have tumors (label 2)
+    - What fraction of cases have tumours (label 2)
     - What fraction have cysts (label 3)
     - Are there any cases with no kidney label at all? (would be anomalous)
     """
@@ -253,7 +253,7 @@ def analyse_seg_labels(
         label_results.append({
             "case_id": case_id,
             "has_kidney": 1 in unique_labels,
-            "has_tumor": 2 in unique_labels,
+            "has_tumour": 2 in unique_labels,
             "has_cyst": 3 in unique_labels,
             "unique_labels": str(unique_labels.tolist())
         })
@@ -265,8 +265,8 @@ def analyse_seg_labels(
     print(f"\nOut of {len(sampled_cases)} sampled cases:")
     print(f"Has kidney label (1): {label_df['has_kidney'].sum()} "
           f"({label_df['has_kidney'].mean()*100:.1f}%)")
-    print(f"Has tumor label  (2): {label_df['has_tumor'].sum()} "
-          f"({label_df['has_tumor'].mean()*100:.1f}%)")
+    print(f"Has tumour label  (2): {label_df['has_tumour'].sum()} "
+          f"({label_df['has_tumour'].mean()*100:.1f}%)")
     print(f"Has cyst label   (3): {label_df['has_cyst'].sum()} "
           f"({label_df['has_cyst'].mean()*100:.1f}%)")
     
@@ -343,7 +343,7 @@ def analyse_histology(dataset_root: str) -> pd.DataFrame:
                ['histol', 
                 'malig', 
                 'benign', 
-                'tumor_type',
+                'tumour_type',
                 'pathol', 
                 'subtype', 
                 'label'])
@@ -445,13 +445,13 @@ def main():
     save_reports(logs_dir, integrity_df, label_df, meta_df, intensity_stats)
 
     print("\n" + "="*50)
-    print("EXPLORATION COMPLETE")
+    print("Successful Data Exploration")
     print("="*50)
-    print("Review the output above before proceeding to Step 4.2")
+    print("Review the output above before proceeding to Patient-Level Splitting")
     print("Key things to confirm:")
     print("  1. All 300 cases loaded successfully")
     print("  2. Intensity range aligns with config window (-79 to 304 HU)")
-    print("  3. Note how many cases have tumor labels (label 2)")
+    print("  3. Note how many cases have tumour labels (label 2)")
     print("  4. Note how many cases have confirmed histology labels")
 
 
