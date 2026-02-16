@@ -118,7 +118,7 @@ def process_case(
 
     # Load volumes
     img_data = nib.load(str(img_path)).get_fdata()
-    seg_data = nib.load(str(img_path)).get_fdata().astype(np.uint8)
+    seg_data = np.round(nib.load(str(seg_path)).get_fdata()).astype(np.uint8)
 
     total_slices   = img_data.shape[2]
     saved_slices   = 0
