@@ -409,7 +409,7 @@ def main():
         random_seed=random_seed
     )
 
-    meta_df = analyse_histology(dataset_root)
+    meta_df = analyse_histology(dataset_root, config)
 
     save_reports(logs_dir, integrity_df, label_df, meta_df, intensity_stats)
 
