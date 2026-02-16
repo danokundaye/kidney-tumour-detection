@@ -120,7 +120,7 @@ def process_case(
     img_data = nib.load(str(img_path)).get_fdata()
     seg_data = nib.load(str(img_path)).get_fdata().astype(np.uint8)
 
-    total_slices   = img_data_shape[2]
+    total_slices   = img_data.shape[2]
     saved_slices   = 0
     skipped_slices = 0
 
