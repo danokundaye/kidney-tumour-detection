@@ -141,11 +141,11 @@ def print_split_summary(
                      ("Segmentation Train", segmentation_df),
                      ("Test", test_df)]:
         malignant_n = df['malignant'].sum()
-        benign_n    = (~df['malignant'].sum())
+        benign_n    = int((df['malignant'] == False).sum())
         total_n     = len(df)
         lines.append(f"\n{name} ({total_n} cases):")
-        lines.append(f"   Malignant : {malignant_n / total_n * 100:.1f}")
-        lines.append(f"   Benign    : {benign_n / total_n * 100:.1f}")
+        lines.append(f"   Malignant : {malignant_n} ({malignant_n / total_n * 100:.1f})")
+        lines.append(f"   Benign    : {benign_n} ({benign_n / total_n * 100:.1f})")
 
     # Confirm none of the cases appears in more than one split
     all_ids = (
