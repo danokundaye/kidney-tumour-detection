@@ -368,7 +368,7 @@ def save_reports(logs_dir: str,
     # Save metadata/histology
     if len(meta_df) > 0:
         meta_path = logs_dir / "exploration_metadata.csv"
-        meta_df.to_csv(meta_path, index=False)
+        meta_df.to_csv(meta_path, index = False)
         print(f"Metadata saved:  {meta_path}")
 
     # Save intensity stats as text
