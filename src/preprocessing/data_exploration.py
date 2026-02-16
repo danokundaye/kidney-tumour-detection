@@ -288,11 +288,12 @@ def analyse_histology(dataset_root: Path, config: dict) -> dict:
     Labels come from kits.json (downloaded from KiTS21 GitHub repo).
     Key field: 'malignant' (True/False) per case.
     """
-    print("\n" + "="*60)
-    print("STEP 5: HISTOLOGY LABEL ANALYSIS")
-    print("="*60)
+    print("\n" + "="*50)
+    print("Step 5: Histology Label Analysis")
     
     # Load kits.json from Drive (one level up from dataset/raw)
+    dataset_root = Path(dataset_root)
+    
     kits_json_path = dataset_root.parent / "kits.json"
     
     if not kits_json_path.exists():
