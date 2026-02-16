@@ -281,7 +281,7 @@ def analyse_seg_labels(
     return label_df
 
 # Histology Label Analysis
-def analyse_histology(dataset_root: Path, config: dict) -> dict:
+def analyse_histology(dataset_root: Path, config: dict) -> pd.DataFrame:
     """
     Analyze histology labels from kits.json saved on Drive.
     
@@ -317,21 +317,24 @@ def analyse_histology(dataset_root: Path, config: dict) -> dict:
     benign_count    = sum(1 for v in label_lookup.values() if v is False)
     missing_count   = sum(1 for v in label_lookup.values() if v is None)
     
+    # Build a DataFrame with one row per case
+    rows = [
+        {
+            'case_id'   : entry['case_id'],
+            'malignant' : entry.get('malignant', None)
+        }
+        for entry in kits_data
+    ]
+    
+    meta_df = pd.DataFrame(rows)
+    
     print(f"\nHistology label distribution:")
-    print(f" Malignant : {malignant_count}")
-    print(f" Benign    : {benign_count}")
-    print(f" Missing   : {missing_count}")
-    print(f" Total     : {len(label_lookup)}")
+    print(f"  Malignant : {malignant_count}")
+    print(f"  Benign    : {benign_count}")
+    print(f"  Missing   : {missing_count}")
+    print(f"  Total     : {len(meta_df)}")
     
-    results = {
-        'total_cases'      : len(label_lookup),
-        'malignant_count'  : malignant_count,
-        'benign_count'     : benign_count,
-        'missing_count'    : missing_count,
-        'label_lookup'     : label_lookup
-    }
-    
-    return results
+    return meta_df
 
 # Save Reports
 def save_reports(logs_dir: str,
