@@ -1,3 +1,4 @@
+# Phase 4, Step 4.2 — Patient-Level Data Splitting
 # This script audits all 300 KiTS21 cases and produces a comprehensive report covering:
 #     - File integrity (are all cases present and loadable?)
 #     - Image dimensions and slice counts
