@@ -281,7 +281,7 @@ def analyse_seg_labels(
     return label_df
 
 # Histology Label Analysis
-def analyse_histology_labels(dataset_root: Path, config: dict) -> dict:
+def analyse_histology(dataset_root: Path, config: dict) -> dict:
     """
     Analyze histology labels from kits.json saved on Drive.
     
