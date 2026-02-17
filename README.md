@@ -34,8 +34,7 @@ This project implements a three-stage deep learning pipeline for automated detec
 - **KiTS21** (Kidney Tumour Segmentation Challenge 2021)
 - 300 anonymized pre-operative CT cases
 - NIfTI format, 512×512 pixels per slice
-- Patient-level split: 110 (detection) / 120 (segmentation) / 
-  70 (testing)
+- Patient-level split: 110 (detection) / 120 (segmentation) / 70 (testing)
 
 **Hardware:**
 - Local: Intel Core i7 (11th gen), 8GB RAM — code writing and testing
@@ -47,41 +46,47 @@ This project implements a three-stage deep learning pipeline for automated detec
 ```
 kidney-tumour-detection/
 │
-├── data/                    # Local data samples only (2-3 cases)
-│   ├── raw/                 # Original NIfTI files
-│   └── processed/           # Preprocessed outputs
+├── notebooks/                          # Google Colab training notebooks
+│   ├── kidney_tumour_pipeline.ipynb    # Session setup and data download
+│   ├── 01_preprocessing.ipynb          # Phase 4 — data preparation and preprocessing
+│   ├── 02_yolo_training.ipynb          # Phase 5 — YOLOv8 detection training
+│   ├── 03_unet_training.ipynb          # Phase 6 — U-Net segmentation training
+│   ├── 04_efficientnet_training.ipynb  # Phase 7 — EfficientNet classification training
+│   └── 05_evaluation.ipynb             # Phase 10 — end-to-end evaluation and metrics
 │
-├── notebooks/               # Google Colab training notebooks
-│
-├── src/                     # Source code
-│   ├── preprocessing/       # NIfTI loading, slicing, augmentation
-│   ├── detection/           # YOLOv8 training and inference
-│   ├── segmentation/        # U-Net training and inference
-│   ├── classification/      # EfficientNet training and inference
-│   ├── explainability/      # SHAP integration
-│   └── evaluation/          # Metrics and reporting
+├── src/                                # Source code
+│   ├── preprocessing/                  # NIfTI loading, slicing, label generation
+│   │   ├── data_exploration.py         # Step 4.1 — dataset audit and statistics
+│   │   ├── data_splitting.py           # Step 4.2 — patient-level case splitting
+│   │   ├── slice_extraction.py         # Step 4.3 — NIfTI to PNG conversion
+│   │   ├── yolo_label_generation.py    # Step 4.4 — YOLO bounding box labels
+│   │   └── yolo_dataset_structure.py   # Step 4.5 — train.txt, val.txt, data.yaml
+│   ├── detection/                      # YOLOv8 training
+│   ├── segmentation/                   # U-Net training
+│   ├── classification/                 # EfficientNet training
+│   ├── explainability/                 # SHAP integration
+│   └── evaluation/                     # Metrics and reporting
 │
 ├── configs/
-│   └── config.yaml          # All paths and hyperparameters
+│   └── config.yaml                     # All paths and hyperparameters
 │
-├── outputs/                 # Gitignored - results saved to Drive
+├── outputs/                            # Gitignored — results saved to Drive
 │   ├── logs/
 │   ├── metrics/
 │   └── checkpoints/
 │
-├── tests/                   # Module verification scripts
-├── requirements-local.txt   # Local development dependencies
-└── requirements-colab.txt   # Colab training dependencies
+├── requirements-local.txt              # Local development dependencies
+└── requirements-colab.txt              # Colab training dependencies
 ```
 ---
 
 ## Local Development Setup
 
-These steps are intended to set up local machine for preprocessing and code editing only. Model training happens on Google Colab.
+These steps set up your local machine for preprocessing and code editing only. Model training happens on Google Colab.
 
 ### Prerequisites
 - Windows 10/11
-- Python 3.11.x
+- Python 3.11.9
 - Git
 
 ### Steps
@@ -110,15 +115,23 @@ Sets up the cloud environment where all model training runs.
 
 **1. Activate Google One Premium**
 
-**2. Open the Colab notebook**
+**2. Open the session setup notebook first — every session**
 ```
 notebooks/kidney_tumour_pipeline.ipynb
 ```
-**3. At the start of every new Colab session, run Cell 0 first**
+**3. Run Cell 0 at the start of every new Colab session**
 ```python
-# Cell 0 handles: Drive mount, kits21 clone,
-# package install, and TRAINING_DIR redirect
+# Drive mount, repo pull, package install
 # Takes approximately 2-3 minutes
+# Must be run before any other notebook
+```
+
+**4. Then open the relevant phase notebook**
+```
+notebooks/01_preprocessing.ipynb   ← Phase 4
+notebooks/02_yolo_training.ipynb   ← Phase 5
+notebooks/03_unet_training.ipynb   ← Phase 6
+...
 ```
 ---
 
@@ -157,13 +170,23 @@ Each case contains: imaging.nii.gz + segmentation.nii.gz
 | 1 | Local VS Code Setup | ✅ Complete |
 | 2 | Google Colab + Drive Setup | ✅ Complete |
 | 3 | Dataset Download and Verification | ✅ Complete |
-| 4 | Preprocessing Pipeline | 🔄 In Progress |
+| 4 | Preprocessing Pipeline | ✅ Complete |
 | 5 | YOLOv8 Detection Training | ⏳ Pending |
 | 6 | U-Net Segmentation Training | ⏳ Pending |
 | 7 | EfficientNet Classification Training | ⏳ Pending |
 | 8 | SHAP Integration | ⏳ Pending |
 | 9 | End-to-End Pipeline Integration | ⏳ Pending |
 | 10 | Evaluation and Metrics | ⏳ Pending |
+
+### Phase 4 — Preprocessing Pipeline (Complete)
+
+| Step | Script | Description |
+|------|--------|-------------|
+| 4.1 | data_exploration.py | Dataset audit — integrity, intensity stats, label distribution, histology counts |
+| 4.2 | data_splitting.py | Patient-level split — 110 detection / 120 segmentation / 70 test |
+| 4.3 | slice_extraction.py | NIfTI volumes → PNG slices (512×512), masks scaled to 0/85/170/255 |
+| 4.4 | yolo_label_generation.py | YOLO bounding box labels — 56,604 slices, 21,814 boxes across 110 cases |
+| 4.5 | yolo_dataset_structure.py | train.txt, val.txt, yolo_data.yaml — stratified 100/10 split |
 
 ---
 
