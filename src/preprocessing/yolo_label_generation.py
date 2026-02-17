@@ -175,7 +175,7 @@ def process_case(
             # Empty file — negative example for YOLO
             label_file.touch()
 
-        return {
+    return {
         'case_id'        : case_id,
         'total_slices'   : total_slices,
         'positive_slices': positive_slices,
