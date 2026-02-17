@@ -6,6 +6,9 @@ paths:
   # Root folder where KiTS21 data resides
   dataset_root: "/content/drive/MyDrive/kidney-tumour-detection/dataset/raw"
 
+  #KiTS21 JSON file location
+  kits_root: "/content/drive/MyDrive/kidney-tumour-detection/dataset/"
+
   # Where processed and output data will go
   processed_root: "/content/drive/MyDrive/kidney-tumour-detection/dataset/processed"
 

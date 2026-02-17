@@ -186,8 +186,8 @@ def main():
     seed       = config['dataset']['random_seed']
 
     # dataset_root holds kits.json alongside the case folders
-    dataset_root  = Path(config['paths']['dataset_root'])
-    kits_json     = dataset_root / "kits.json"
+    kits_root  = Path(config['paths']['dataset_root'])
+    kits_json     = kits_root / "kits.json"
 
     # detection_train folder contains all 110 cases with images/masks/labels
     detection_dir = slices_dir / "detection_train"
