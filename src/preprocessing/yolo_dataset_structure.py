@@ -71,7 +71,7 @@ def split_detection_cases(
     # convert integer case_id in kits.json to string
     malignancy_map = {}
     for entry in kits_data:
-        case_id = f"case_{str(entry['case_id']).zfill(5)}"
+        case_id = entry['case_id']
         # Default to malignant if field is missing
         malignancy_map[case_id] = entry.get('malignant', True)
 
