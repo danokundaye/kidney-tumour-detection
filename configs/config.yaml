@@ -12,7 +12,6 @@ paths:
   # Subfolders that will be created during preprocessing
   splits_dir: "/content/drive/MyDrive/kidney-tumour-detection/dataset/processed/splits"
   slices_dir: "/content/drive/MyDrive/kidney-tumour-detection/dataset/processed/slices"
-  yolo_labels_dir: "/content/drive/MyDrive/kidney-tumour-detection/dataset/processed/yolo_labels"
   unet_crops_dir: "/content/drive/MyDrive/kidney-tumour-detection/dataset/processed/unet_crops"
   patches_dir: "/content/drive/MyDrive/kidney-tumour-detection/dataset/processed/patches"
 

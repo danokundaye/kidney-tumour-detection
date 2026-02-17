@@ -24,12 +24,15 @@
 # Execution: Google Colab
 #
 # OUTPUT STRUCTURE:
-#   processed/yolo_labels/
+#   processed/slice/
 #   └── detection_train/
 #       └── case_00000/
-#           ├── slice_0000.txt  (empty — no kidney)
-#           ├── slice_0139.txt  (one or two kidney boxes)
-#           └── ...
+#           |- images
+#           |- masks
+#           |- labels
+#              ├── slice_0000.txt  (empty — no kidney)
+#              ├── slice_0139.txt  (one or two kidney boxes)
+#              └── ...
 
 import yaml
 import numpy as np
@@ -107,8 +110,8 @@ def mask_to_yolo(
         # Convert to YOLO format (centre_x, centre_y, width, height)
         cx = (col_min + col_max) / 2.0 / img_width
         cy = (row_min + row_max) / 2.0 / img_height
-        w  = (col_max - col_min) / 2.0 / img_width
-        h  = (row_max - row_min) / 2.0 / img_height
+        w  = (col_max - col_min) / img_width
+        h  = (row_max - row_min) / img_height
 
         # Clamp to [0, 1] to handle any edge cases
         cx = np.clip(cx, 0.0, 1.0)
@@ -135,7 +138,6 @@ def process_case(
     Args:
         case_id    : e.g. 'case_00000'
         masks_dir  : Path to this case's mask PNGs
-        labels_dir : Path to save .txt label files
         img_height : Image height (512)
         img_width  : Image width (512)
         min_area   : Minimum organ area to keep
@@ -143,9 +145,7 @@ def process_case(
     Returns:
         Dict with processing statistics for this case
     """
-
     labels_dir.mkdir(parents=True, exist_ok=True)
-
     mask_files = sorted(masks_dir.glob("*.png"))
 
     total_slices   = len(mask_files)
@@ -188,7 +188,6 @@ def process_case(
 def generate_labels(
         split_csv: str,
         slices_dir: Path,
-        labels_dir: Path,
         img_height: int,
         img_width: int,
         min_area: int
@@ -209,7 +208,7 @@ def generate_labels(
     # Checkpoint for already completed cases
     completed = set()
     for case_id in case_ids:
-        case_labels_dir = labels_dir / case_id
+        case_labels_dir = slices_dir / "detection_train" / case_id / "labels"
         if case_labels_dir.exists() and any(case_labels_dir.glob("*.txt")):
             completed.add(case_id)
 
@@ -227,7 +226,7 @@ def generate_labels(
 
     for case_id in tqdm(remaining, desc="Generating YOLO labels"):
         masks_dir_case  = slices_dir / "detection_train" / case_id / "masks"
-        labels_dir_case = labels_dir / case_id
+        labels_dir_case = slices_dir / "detection_train" / case_id / "labels"
 
         result = process_case(
             case_id    = case_id,
@@ -256,7 +255,8 @@ def main():
     config      = load_config(config_path)
 
     slices_dir  = Path(config['paths']['slices_dir'])
-    labels_dir  = Path(config['paths']['yolo_labels_dir'])
+    # Labels saved inside each case folder (slices_dir/case_id/labels/)
+    # YOLO finds them automatically by replacing 'images' with 'labels' in path
     splits_dir  = Path(config['paths']['splits_dir'])
     img_height  = config['preprocessing']['slice_size']
     img_width   = config['preprocessing']['slice_size']
@@ -266,14 +266,12 @@ def main():
     print("YOLO label generation")
     print("=" * 50)
     print(f"Slices dir  : {slices_dir}")
-    print(f"Labels dir  : {labels_dir}")
     print(f"Image size  : {img_height} x {img_width}")
     print(f"Min area    : {min_area} pixels\n")
 
     generate_labels(
         split_csv  = str(splits_dir / "detection_train.csv"),
         slices_dir = slices_dir,
-        labels_dir = labels_dir,
         img_height = img_height,
         img_width  = img_width,
         min_area   = min_area
