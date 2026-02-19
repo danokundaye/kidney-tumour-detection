@@ -171,12 +171,14 @@ Each case contains: imaging.nii.gz + segmentation.nii.gz
 | 2 | Google Colab + Drive Setup | ✅ Complete |
 | 3 | Dataset Download and Verification | ✅ Complete |
 | 4 | Preprocessing Pipeline | ✅ Complete |
-| 5 | YOLOv8 Detection Training | ⏳ Pending |
+| 5 | YOLOv8 Detection Training | ✅ Complete |
 | 6 | U-Net Segmentation Training | ⏳ Pending |
 | 7 | EfficientNet Classification Training | ⏳ Pending |
 | 8 | SHAP Integration | ⏳ Pending |
 | 9 | End-to-End Pipeline Integration | ⏳ Pending |
 | 10 | Evaluation and Metrics | ⏳ Pending |
+
+---
 
 ### Phase 4 — Preprocessing Pipeline (Complete)
 
@@ -187,6 +189,65 @@ Each case contains: imaging.nii.gz + segmentation.nii.gz
 | 4.3 | slice_extraction.py | NIfTI volumes → PNG slices (512×512), masks scaled to 0/85/170/255 |
 | 4.4 | yolo_label_generation.py | YOLO bounding box labels — 56,604 slices, 21,814 boxes across 110 cases |
 | 4.5 | yolo_dataset_structure.py | train.txt, val.txt, yolo_data.yaml — stratified 100/10 split |
+
+---
+
+### Phase 5 — YOLOv8 Detection Training (Complete)
+
+**Model:** YOLOv8s (11.1M parameters)  
+**Final checkpoint:** `results/phase5_yolo/yolov8s_run10/weights/best.pt`  
+**Training hardware:** NVIDIA A100 40GB, Google Colab Pro+  
+**Total training runs:** 10 (runs 1–7 experimental, run 8 baseline, run 10 final)
+
+#### Training Configuration (Final — Run 10)
+| Parameter | Value |
+|-----------|-------|
+| Epochs | 100 (patience=0, full run) |
+| Batch size | 16 |
+| Optimizer | Adam |
+| Learning rate | 0.001 |
+| Image size | 512×512 |
+| Training images | 7,706 (filtered) |
+| Confidence threshold (inference) | 0.10 |
+
+#### Dataset Filtering Strategy
+The original 51,484 training images contained 63% background slices (no kidney visible), which caused the model to plateau early across multiple runs. Both training and validation sets were filtered to match the same distribution:
+
+- **Kept:** Large kidney slices only (bounding box height >10%, width >5% of image) — 3,853 train / 246 val
+- **Kept:** 1:1 background ratio — 3,853 train / 246 val background slices
+- **Discarded:** 14,942 boundary slices where kidney occupies less than 10% of image height
+- **Final training set:** 7,706 images (50% kidney, 50% background)
+- **Final validation set:** 492 images (50% kidney, 50% background)
+
+> **Key insight:** Matching validation distribution to training distribution produced reliable mAP signals during training, enabling meaningful epoch-by-epoch monitoring and correct best checkpoint selection.
+
+#### Results
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Raw detection rate | 94.3% | On large kidney slices at conf=0.10 |
+| mAP@0.5 | 0.619 | On filtered validation set (246 large slices) |
+| Precision | 0.775 | IoU-based |
+| Recall | 0.497 | IoU-based — understates real performance (see note) |
+
+> **Note on metrics:** IoU-based recall (0.497) understates real detection capability because KiTS21 ground truth boxes are drawn tightly around mask boundaries while the model predicts slightly larger generalised boxes. Raw detection rate (94.3%) is more representative of pipeline performance — U-Net only requires the kidney to be present within the crop, not perfectly bounded.
+
+#### Pipeline Handoff to U-Net
+When passing detections to the segmentation stage:
+1. Run YOLOv8 at conf=0.10 per slice
+2. If no box predicted → skip slice
+3. If multiple boxes predicted → take highest confidence box only (NMS)
+4. Expand selected box by 20% margin on all sides
+5. Crop slice to expanded box → pass to U-Net
+
+#### Key Lessons Learned
+- **Background dominance (63%)** was the primary cause of poor detection across early runs
+- **Matching train/val distribution** is critical — mismatched validation set produced unreliable mAP signals and caused premature early stopping
+- **Early stopping unreliable** with mismatched val set — disabled with patience=0 for final runs
+- **Large batch sizes (64–128)** caused over-averaged gradients and early plateaus — batch=16 optimal
+- **cls=1.5 loss weight** made model overly conservative, destroying recall
+- **Lower confidence threshold (0.10)** recovers missed detections without retraining — 70.7% → 94.3%
+- **Multiple boxes per slice** appear at conf=0.10 — always take highest confidence box for U-Net
 
 ---
 
