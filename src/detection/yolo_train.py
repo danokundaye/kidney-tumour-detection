@@ -158,65 +158,53 @@ def build_filtered_dataset(splits_dir: Path,
     return str(retrain_train_txt), str(retrain_val_txt), str(retrain_yaml)
 
 # Copy dataset to local
-def copy_dataset_to_local(filtered_train_txt: str,
-                           filtered_val_txt: str,
-                           local_dir: Path) -> tuple:
+def copy_dataset_to_local(splits_dir: Path,
+                           slices_dir: Path,
+                           local_dir: Path,
+                           filtered_train_txt: str,
+                           filtered_val_txt: str) -> tuple:
     """
-    Copy all required images and labels to Colab local storage.
-    This avoids slow Drive read speeds during training (~700 MB/s vs 0.1 MB/s).
-
-    Returns updated train/val txt paths pointing to local copies.
+    Copy detection_train cases to local Colab storage using rsync.
+    Copies entire case directories at once — much faster than file-by-file.
     """
     print("\nCopying dataset to local storage...")
-    print("This takes ~15-20 minutes but makes training 7x faster.")
+    print("Using rsync for fast directory-level copying.")
 
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy entire detection_train folder structure to local
+    src = str(slices_dir / "detection_train") + "/"
+    dst = str(local_dir / "detection_train") + "/"
+
+    print(f"  Source : {src}")
+    print(f"  Dest   : {dst}")
+
+    ret = os.system(f"rsync -a --info=progress2 '{src}' '{dst}'")
+
+    if ret != 0:
+        raise RuntimeError("rsync failed. Check Drive mount and source path.")
+
+    print("rsync complete.")
+
+    # Now rebuild path lists pointing to local storage
     train_paths = Path(filtered_train_txt).read_text().strip().splitlines()
     val_paths   = Path(filtered_val_txt).read_text().strip().splitlines()
-    all_paths   = train_paths + val_paths
-
-    local_images_dir = local_dir / "images"
-    local_labels_dir = local_dir / "labels"
-    local_images_dir.mkdir(parents=True, exist_ok=True)
-    local_labels_dir.mkdir(parents=True, exist_ok=True)
 
     new_train_paths = []
     new_val_paths   = []
 
-    # Copy images and labels
-    from tqdm import tqdm
+    for img_path in train_paths:
+        # Replace Drive path prefix with local path
+        # e.g. .../slices/detection_train/case_00000/images/slice_0000.png
+        #   -> /content/yolo_retrain_data/detection_train/case_00000/images/slice_0000.png
+        rel  = Path(img_path).relative_to(slices_dir)
+        new_train_paths.append(str(local_dir / rel))
 
-    for img_path in tqdm(train_paths, desc="Copying train"):
-        src_img   = Path(img_path)
-        dst_img   = local_images_dir / f"{src_img.parent.parent.name}_{src_img.name}"
-        src_label = Path(img_path.replace("/images/", "/labels/")).with_suffix(".txt")
-        dst_label = local_labels_dir / dst_img.with_suffix(".txt").name
+    for img_path in val_paths:
+        rel  = Path(img_path).relative_to(slices_dir)
+        new_val_paths.append(str(local_dir / rel))
 
-        if not dst_img.exists():
-            shutil.copy2(src_img, dst_img)
-        if src_label.exists() and not dst_label.exists():
-            shutil.copy2(src_label, dst_label)
-        elif not src_label.exists() and not dst_label.exists():
-            # Empty label file for background slices
-            dst_label.touch()
-
-        new_train_paths.append(str(dst_img))
-
-    for img_path in tqdm(val_paths, desc="Copying val"):
-        src_img   = Path(img_path)
-        dst_img   = local_images_dir / f"{src_img.parent.parent.name}_{src_img.name}"
-        src_label = Path(img_path.replace("/images/", "/labels/")).with_suffix(".txt")
-        dst_label = local_labels_dir / dst_img.with_suffix(".txt").name
-
-        if not dst_img.exists():
-            shutil.copy2(src_img, dst_img)
-        if src_label.exists() and not dst_label.exists():
-            shutil.copy2(src_label, dst_label)
-        elif not src_label.exists() and not dst_label.exists():
-            dst_label.touch()
-
-        new_val_paths.append(str(dst_img))
-
-    # Write updated path lists pointing to local storage
+    # Write updated path lists
     local_train_txt = local_dir / "local_train.txt"
     local_val_txt   = local_dir / "local_val.txt"
 
@@ -296,12 +284,9 @@ def main():
     # Local Colab storage for fast training
     local_dir = Path("/content/yolo_retrain_data")
 
-    print("=" * 60)
-    print("YOLO RETRAIN — FULL POSITIVE SLICE TRAINING")
-    print("=" * 60)
+    print("YOLO Retrain")
     print("Key change from Phase 5: NO large-slice filter")
     print("All positive kidney slices included in training")
-    print("=" * 60)
 
     # Step 1: Build filtered dataset (all positives + 1:1 background)
     _, _, data_yaml = build_filtered_dataset(
@@ -313,9 +298,11 @@ def main():
 
     # Step 2: Copy to local storage for fast read speeds
     _, _, local_yaml = copy_dataset_to_local(
+        splits_dir         = splits_dir,
+        slices_dir         = slices_dir,
+        local_dir          = local_dir,
         filtered_train_txt = str(filter_output_dir / "retrain_train.txt"),
-        filtered_val_txt   = str(filter_output_dir / "retrain_val.txt"),
-        local_dir          = local_dir
+        filtered_val_txt   = str(filter_output_dir / "retrain_val.txt")
     )
 
     # Step 3: Train
