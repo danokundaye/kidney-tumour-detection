@@ -157,78 +157,6 @@ def build_filtered_dataset(splits_dir: Path,
 
     return str(retrain_train_txt), str(retrain_val_txt), str(retrain_yaml)
 
-# Copy dataset to local
-def copy_dataset_to_local(splits_dir: Path,
-                           slices_dir: Path,
-                           local_dir: Path,
-                           filtered_train_txt: str,
-                           filtered_val_txt: str) -> tuple:
-    """
-    Copy detection_train cases to local Colab storage using rsync.
-    Copies entire case directories at once — much faster than file-by-file.
-    """
-    print("\nCopying dataset to local storage...")
-    print("Using rsync for fast directory-level copying.")
-
-    local_dir.mkdir(parents=True, exist_ok=True)
-
-    # Copy entire detection_train folder structure to local
-    src = str(slices_dir / "detection_train") + "/"
-    dst = str(local_dir / "detection_train") + "/"
-
-    print(f"  Source : {src}")
-    print(f"  Dest   : {dst}")
-
-    ret = os.system(f"rsync -a --info=progress2 '{src}' '{dst}'")
-
-    if ret != 0:
-        raise RuntimeError("rsync failed. Check Drive mount and source path.")
-
-    print("rsync complete.")
-
-    # Now rebuild path lists pointing to local storage
-    train_paths = Path(filtered_train_txt).read_text().strip().splitlines()
-    val_paths   = Path(filtered_val_txt).read_text().strip().splitlines()
-
-    new_train_paths = []
-    new_val_paths   = []
-
-    for img_path in train_paths:
-        # Replace Drive path prefix with local path
-        # e.g. .../slices/detection_train/case_00000/images/slice_0000.png
-        #   -> /content/yolo_retrain_data/detection_train/case_00000/images/slice_0000.png
-        rel  = Path(img_path).relative_to(slices_dir)
-        new_train_paths.append(str(local_dir / rel))
-
-    for img_path in val_paths:
-        rel  = Path(img_path).relative_to(slices_dir)
-        new_val_paths.append(str(local_dir / rel))
-
-    # Write updated path lists
-    local_train_txt = local_dir / "local_train.txt"
-    local_val_txt   = local_dir / "local_val.txt"
-
-    local_train_txt.write_text("\n".join(new_train_paths))
-    local_val_txt.write_text("\n".join(new_val_paths))
-
-    # Write updated data.yaml
-    local_yaml = local_dir / "local_data.yaml"
-    data_yaml  = {
-        'train': str(local_train_txt),
-        'val'  : str(local_val_txt),
-        'nc'   : 1,
-        'names': ['kidney']
-    }
-    with open(local_yaml, 'w') as f:
-        yaml.dump(data_yaml, f, default_flow_style=False)
-
-    print(f"\nLocal dataset ready:")
-    print(f"  Train images : {len(new_train_paths)}")
-    print(f"  Val images   : {len(new_val_paths)}")
-    print(f"  Data yaml    : {local_yaml}")
-
-    return str(local_train_txt), str(local_val_txt), str(local_yaml)
-
 # Model training
 def train_yolo(data_yaml: str,
                results_dir: Path,
@@ -252,13 +180,14 @@ def train_yolo(data_yaml: str,
         batch      = 16,
         optimizer  = "Adam",
         lr0        = 0.001,
-        patience   = 0,          # Disable early stopping — val metrics too noisy
+        patience   = 0,
         project    = str(results_dir),
         name       = run_name,
         exist_ok   = True,
         verbose    = True,
-        device     = 0,          # GPU
+        device     = 0,
         workers    = 4,
+        cache      = 'ram',    # Load all images into RAM once — avoids Drive read bottleneck
     )
 
     # Report best model location
@@ -296,18 +225,8 @@ def main():
         seed        = seed
     )
 
-    # Step 2: Copy to local storage for fast read speeds
-    _, _, local_yaml = copy_dataset_to_local(
-        splits_dir         = splits_dir,
-        slices_dir         = slices_dir,
-        local_dir          = local_dir,
-        filtered_train_txt = str(filter_output_dir / "retrain_train.txt"),
-        filtered_val_txt   = str(filter_output_dir / "retrain_val.txt")
-    )
-
-    # Step 3: Train
     train_yolo(
-        data_yaml   = local_yaml,
+        data_yaml   = str(filter_output_dir / "retrain_data.yaml"),
         results_dir = results_dir,
         run_name    = "yolov8s_retrain_run1"
     )
