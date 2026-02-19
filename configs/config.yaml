@@ -57,7 +57,7 @@ preprocessing:
   bbox_margin: 0.20
 
   # Input dimensions for each stage
-  unet_input_size: 254
+  unet_input_size: 256
   efficientnet_input_size: 224
 
   # Minimum tumor area to be considered valid (in pixels)
