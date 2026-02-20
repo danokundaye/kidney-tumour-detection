@@ -222,7 +222,7 @@ def main():
     config      = load_config(config_path)
 
     # Paths
-    model_path  = "/content/drive/MyDrive/kidney-tumour-detection/results/phase5_yolo/yolov8s_run10/weights/best.pt"
+    model_path = "/content/drive/MyDrive/kidney-tumour-detection/results/phase5_yolo_retrain/yolov8s_retrain_run1/weights/best.pt"    
     slices_dir  = Path(config['paths']['slices_dir'])
     splits_dir  = Path(config['paths']['splits_dir'])
     output_dir  = Path(config['paths']['processed_root']) / "unet_boxes"
