@@ -22,6 +22,8 @@
 #           masks/slice_0045.png            ← binary mask, same crop + resize
 #           region_types/slice_0045.txt     ← tumour_only/cyst_only/both
 
+import os
+import shutil
 import json
 import yaml
 import numpy as np
@@ -237,7 +239,7 @@ def process_case(
     return stats
 
 # Processing loop
-def prepare_unet_crops(
+def prepare_crop(
         splits_dir  : Path,
         slices_dir  : Path,
         boxes_dir   : Path,
