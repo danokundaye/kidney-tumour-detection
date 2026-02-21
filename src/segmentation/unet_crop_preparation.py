@@ -237,42 +237,44 @@ def process_case(
     return stats
 
 # Processing loop
-def prepare_crop (
-        splits_dir : Path,
-        slices_dir : Path,
-        boxes_dir  : Path,
-        output_dir : Path,
-        unet_size  : int,
-        margin     : float
-):
+def prepare_unet_crops(
+        splits_dir  : Path,
+        slices_dir  : Path,
+        boxes_dir   : Path,
+        output_dir  : Path,
+        unet_size   : int,
+        margin      : float):
     """
-    Process all segmentation_train cases.
-    119 cases use YOLO boxes and case_00152 uses ground truth fallback.
+    Process all 120 segmentation_train cases.
+    Writes to local storage first, syncs each case to Drive after completion.
     """
     FALLBACK_CASE = "case_00152"
 
-    # Load cases
-    seg_train = "segmentation_train.csv"
-    seg_csv = splits_dir / seg_train
+    # Local storage for fast writes
+    local_output_dir = Path("/content/unet_crops")
+    local_output_dir.mkdir(parents=True, exist_ok=True)
+
+    seg_csv  = splits_dir / "segmentation_train.csv"
     cases_df = pd.read_csv(seg_csv)
     case_ids = cases_df['case_id'].tolist()
 
     print(f"Total cases      : {len(case_ids)}")
     print(f"Fallback case    : {FALLBACK_CASE}")
-    print(f"Output dir       : {output_dir}")
-    print(f"U-Net input size : {unet_size}x{unet_size}\n")
+    print(f"Local output     : {local_output_dir}")
+    print(f"Drive output     : {output_dir}")
+    print(f"U-Net input size : {unet_size}x{unet_size}")
+    print()
 
-    output_dir.mkdir(parents = True, exist_ok = True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     all_stats = []
 
-    # Loop through all cases
-    for case_id in tqdm(case_ids, desc = "Preparing U-Net crops..."):
-        # Check if the case has already been processed
-        out_case_dir = output_dir / case_id
-        if out_case_dir.exists() and any(out_case_dir.rglob("*.png")):
-            # Count existing files
-            existing = len(list((out_case_dir / "images").glob("*.png")))
+    for case_id in tqdm(case_ids, desc="Preparing U-Net crops"):
+
+        # Check if case has already been processed and synced
+        drive_case_dir = output_dir / case_id
+        if drive_case_dir.exists() and any(drive_case_dir.rglob("*.png")):
+            existing = len(list((drive_case_dir / "images").glob("*.png")))
             all_stats.append({
                 'case_id'         : case_id,
                 'total_slices'    : existing,
@@ -288,21 +290,31 @@ def prepare_crop (
 
         is_fallback = (case_id == FALLBACK_CASE)
 
+        # Process to local storage first
         stats = process_case(
             case_id     = case_id,
             slices_dir  = slices_dir,
             boxes_dir   = boxes_dir,
-            output_dir  = output_dir,
+            output_dir  = local_output_dir,  # write locally
             unet_size   = unet_size,
             margin      = margin,
             is_fallback = is_fallback
         )
+
+        # Sync this case from local to Drive immediately
+        local_case = str(local_output_dir / case_id) + "/"
+        drive_case = str(output_dir / case_id) + "/"
+        os.system(f"rsync -a '{local_case}' '{drive_case}'")
+
+        # Remove local copy to free space
+        import shutil
+        shutil.rmtree(str(local_output_dir / case_id))
+
         all_stats.append(stats)
 
     # Print summary
-        # Print summary
-    total_processed = sum(s['processed_slices']  for s in all_stats)
-    total_skipped   = sum(s['skipped_slices']    for s in all_stats)
+    total_processed = sum(s['processed_slices'] for s in all_stats)
+    total_skipped   = sum(s['skipped_slices']   for s in all_stats)
     total_tumour    = sum(s['tumour_only']       for s in all_stats)
     total_cyst      = sum(s['cyst_only']         for s in all_stats)
     total_both      = sum(s['both']              for s in all_stats)
