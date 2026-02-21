@@ -253,8 +253,10 @@ def prepare_crop(
     FALLBACK_CASE = "case_00152"
 
     # Local storage for fast writes
-    local_output_dir = Path("/content/unet_crops")
-    local_output_dir.mkdir(parents=True, exist_ok=True)
+    local_slices_dir = Path("/content/local_data/slices")
+    local_output_dir = Path("/content/local_data/unet_crops")
+    local_slices_dir.mkdir(parents = True, exist_ok = True)
+    local_output_dir.mkdir(parents = True, exist_ok = True)
 
     seg_csv  = splits_dir / "segmentation_train.csv"
     cases_df = pd.read_csv(seg_csv)
@@ -267,8 +269,24 @@ def prepare_crop(
     print(f"U-Net input size : {unet_size}x{unet_size}")
     print()
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents = True, exist_ok = True)
 
+    # Copy segmentation_train slices to local storage to make processing faster
+    local_seg_dir = local_slices_dir / "segmentation_train"
+
+    if not local_seg_dir.exists():
+        print(f"\nCopying segmentation_train to local storage (~862MB)...")
+        src = str(slices_dir / "segmentation_train") + "/"
+        dst = str(local_seg_dir) + "/"
+        ret = os.system(f"rsync -a --info=progress2 '{src}' '{dst}'")
+        if ret != 0:
+            raise RuntimeError("rsync failed. Check Drive mount.")
+        print("Source data copied to local storage.")
+    else:
+        print(f"\nLocal source data already exists, skipping copy.")
+
+
+    # Process cases from local storage
     all_stats = []
 
     for case_id in tqdm(case_ids, desc="Preparing U-Net crops"):
@@ -292,27 +310,29 @@ def prepare_crop(
 
         is_fallback = (case_id == FALLBACK_CASE)
 
-        # Process to local storage first
+        # Process from local slices to local output first
         stats = process_case(
             case_id     = case_id,
-            slices_dir  = slices_dir,
+            slices_dir  = local_slices_dir,
             boxes_dir   = boxes_dir,
-            output_dir  = local_output_dir,  # write locally
+            output_dir  = local_output_dir, 
             unet_size   = unet_size,
             margin      = margin,
             is_fallback = is_fallback
         )
 
-        # Sync this case from local to Drive immediately
-        local_case = str(local_output_dir / case_id) + "/"
-        drive_case = str(output_dir / case_id) + "/"
-        os.system(f"rsync -a '{local_case}' '{drive_case}'")
-
-        # Remove local copy to free space
-        import shutil
-        shutil.rmtree(str(local_output_dir / case_id))
-
         all_stats.append(stats)
+
+    # Sync all completed crops from local to Drive immediately
+    print(f"\nSyncing crops to Drive...")
+    src = str(local_output_dir) + "/"
+    dst = str(output_dir) + "/"
+    ret = os.system(f"rsync -a --info=progress2 '{src}' '{dst}'")
+    if ret != 0:
+        print("WARNING: rsync to Drive failed. Crops are still in local storage.")
+    else:
+        print("Sync complete.")
+
 
     # Print summary
     total_processed = sum(s['processed_slices'] for s in all_stats)
