@@ -78,11 +78,11 @@ def expand_box(
 
 # Inference on all slices of one case
 def run_inference_on_case(
-        case_id: str,
-        slices_dir: Path,
-        model: YOLO,
-        conf_thresh: float,
-        margin: float
+        case_id     : str,
+        slices_dir  : Path,
+        model       : YOLO,
+        conf_thresh : float,
+        margin      : float
     ) -> dict:
     """
     Run YOLO inference on all slices for one case.
