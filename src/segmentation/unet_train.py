@@ -78,6 +78,7 @@ class KidneySegDataset(Dataset):
             self,
             case_ids     : list,
             crops_dir    : Path,
+            index_path   : Path,
             augment      : bool = False,
             healthy_ratio: int  = 3
         ):
@@ -89,48 +90,48 @@ class KidneySegDataset(Dataset):
         index_df = pd.read_csv(index_path)
 
         # Filter to only cases in this split
-    index_df = index_df[index_df['case_id'].isin(case_ids)]
+        index_df = index_df[index_df['case_id'].isin(case_ids)]
 
-    # Separate abnormal and healthy slices
-    abnormal_df = index_df[index_df['region_type'].isin(['tumour', 'cyst'])]
-    healthy_df  = index_df[index_df['region_type'] == 'healthy']
+        # Separate abnormal and healthy slices
+        abnormal_df = index_df[index_df['region_type'].isin(['tumour', 'cyst'])]
+        healthy_df  = index_df[index_df['region_type'] == 'healthy']
 
-    abnormal_slices = abnormal_df.to_dict('records')
-    healthy_slices  = healthy_df.to_dict('records')
+        abnormal_slices = abnormal_df.to_dict('records')
+        healthy_slices  = healthy_df.to_dict('records')
 
-    # Sample healthy slices at healthy_ratio:1
-    n_abnormal       = len(abnormal_slices)
-    n_healthy_sample = min(len(healthy_slices), n_abnormal * healthy_ratio)
+        # Sample healthy slices at healthy_ratio:1
+        n_abnormal       = len(abnormal_slices)
+        n_healthy_sample = min(len(healthy_slices), n_abnormal * healthy_ratio)
 
-    random.seed(42)
-    sampled_healthy = random.sample(healthy_slices, n_healthy_sample)
+        random.seed(42)
+        sampled_healthy = random.sample(healthy_slices, n_healthy_sample)
 
-    self.slices = abnormal_slices + sampled_healthy
-    random.shuffle(self.slices)
+        self.slices = abnormal_slices + sampled_healthy
+        random.shuffle(self.slices)
 
-    print(f"  Abnormal slices  : {n_abnormal}")
-    print(f"  Healthy slices   : {n_healthy_sample} (sampled from {len(healthy_slices)})")
-    print(f"  Total slices     : {len(self.slices)}")
+        print(f"  Abnormal slices  : {n_abnormal}")
+        print(f"  Healthy slices   : {n_healthy_sample} (sampled from {len(healthy_slices)})")
+        print(f"  Total slices     : {len(self.slices)}")
 
-    # Augmentation pipeline
-    self.train_transform = A.Compose([
-        A.HorizontalFlip(p=0.5),
-        A.Rotate(limit=15, p=0.5),
-        A.RandomBrightnessContrast(
-            brightness_limit=0.2,
-            contrast_limit=0.2,
-            p=0.5
-        ),
-        A.GaussNoise(p=0.3),
-        A.ElasticTransform(p=0.3),
-        A.Normalize(mean=[0.485], std=[0.229]),
-        ToTensorV2()
-    ])
+        # Augmentation pipeline
+        self.train_transform = A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.Rotate(limit=15, p=0.5),
+            A.RandomBrightnessContrast(
+                brightness_limit=0.2,
+                contrast_limit=0.2,
+                p=0.5
+            ),
+            A.GaussNoise(p=0.3),
+            A.ElasticTransform(p=0.3),
+            A.Normalize(mean=[0.485], std=[0.229]),
+            ToTensorV2()
+        ])
 
-    self.val_transform = A.Compose([
-        A.Normalize(mean=[0.485], std=[0.229]),
-        ToTensorV2()
-    ])
+        self.val_transform = A.Compose([
+            A.Normalize(mean=[0.485], std=[0.229]),
+            ToTensorV2()
+        ])
 
     def __len__(self):
         return len(self.slices)
