@@ -98,7 +98,7 @@ class KidneySegDataset(Dataset):
         index_df = index_df[index_df['case_id'].isin(case_ids)]
 
         # Separate abnormal and healthy slices
-        abnormal_df = index_df[index_df['region_type'].isin(['tumour', 'cyst'])]
+        abnormal_df = index_df[index_df['region_type'] == 'abnormal']
         healthy_df  = index_df[index_df['region_type'] == 'healthy']
 
         abnormal_slices = abnormal_df.to_dict('records')
