@@ -15,12 +15,17 @@
 #   - Early stopping: patience = 30 epochs based on validation Dice
 #   - Max epochs: 150
 #
+# Note:
+#   - Rsync local storage copying has been replaced with zip extraction
+#   - pin_memory changed from True to False to avoid silent hanging when reading from Drive
+#   - num_workers stays at 0 to avoid multiprocessing deadlocks
+#   - 
+# 
 # Input:
-#   - unet_crops/case_id/images/     CT crops (256x256 grayscale)
-#   - unet_crops/case_id/masks/      Binary masks (256x256, 0/255)
-#   - unet_crops/case_id/region_types/ Region type txt files
-#   - splits/unet_train.csv          108 training cases
-#   - splits/unet_val.csv            12 validation cases
+#   - unet_crops.zip                     Single zip archive on Drive
+#   - splits/unet_crops_index.csv        Slice index (case_id, slice_name, region_type)
+#   - splits/unet_train.csv              108 training cases
+#   - splits/unet_val.csv                12 validation cases
 #
 # Execution: Google Colab
 #
@@ -128,6 +133,7 @@ class KidneySegDataset(Dataset):
             ToTensorV2()
         ])
 
+        # Normalise validation for reliable epoch-to-epoch comparison
         self.val_transform = A.Compose([
             A.Normalize(mean=[0.485], std=[0.229]),
             ToTensorV2()
@@ -337,14 +343,14 @@ def train_unet(crops_dir  : Path,
     batch_size  = batch_size,
     shuffle     = True,
     num_workers = 0,
-    pin_memory  = True
+    pin_memory  = False
     )
     val_loader = DataLoader(
     val_dataset,
     batch_size  = batch_size,
     shuffle     = False,
     num_workers = 0,
-    pin_memory  = True
+    pin_memory  = False
     )
 
     # Model: U-Net with ResNet50 encoder
@@ -360,6 +366,7 @@ def train_unet(crops_dir  : Path,
     # Loss, optimizer, scheduler
     loss_fn   = DiceBCELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    # Cosine annealing scheduler smoothly reduces lr from 0.0001 to 1e-6 over training
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=max_epochs, eta_min=1e-6
     )
@@ -387,8 +394,7 @@ def train_unet(crops_dir  : Path,
     print(f"Patience         : {patience}")
     print(f"Batch size       : {batch_size}")
     print(f"Learning rate    : {lr}")
-    print(f"Results dir      : {results_dir}")
-    print("=" * 60)
+    print(f"Results dir      : {results_dir}\n")
 
     for epoch in range(1, max_epochs + 1):
 
@@ -402,7 +408,7 @@ def train_unet(crops_dir  : Path,
             model, val_loader, loss_fn, device
         )
 
-        # Update scheduler
+        # Update scheduler after each epoch
         scheduler.step()
         current_lr = optimizer.param_groups[0]['lr']
 
@@ -447,9 +453,7 @@ def train_unet(crops_dir  : Path,
     torch.save(model.state_dict(), weights_dir / "last.pt")
     metrics_file.close()
 
-    print(f"\n{'='*60}")
-    print(f"TRAINING COMPLETE")
-    print(f"{'='*60}")
+    print(f"\nTraining Complete")
     print(f"  Best Val Dice  : {best_val_dice:.4f} at epoch {best_epoch}")
     print(f"  Weights saved  : {weights_dir}")
     print(f"  Metrics saved  : {metrics_path}")
@@ -463,17 +467,33 @@ def main():
 
     # Local storage paths — read from local for speed
     # Read directly from Drive — use RAM caching in DataLoader instead
-    crops_dir   = Path(config['paths']['unet_crops_dir'])
-    splits_dir  = Path(config['paths']['splits_dir'])
-    results_dir = Path(config['paths']['results_dir']) / "phase6_unet"
-
-    # Drive crops path for rsync
-    drive_crops_dir = Path(config['paths']['unet_crops_dir'])
+    local_crops_dir = Path("/content/local_data/unet_crops")
+    splits_dir      = Path(config['paths']['splits_dir'])
+    results_dir     = Path(config['paths']['results_dir']) / "phase6_unet"
+    zip_path        = Path(config['paths']['processed_root']) / "unet_crops.zip"
 
     print("Step 6.4 — U-Net Segmentation Training")
 
+    # Extract crops from zip archive if not already local
+    # Zip is created by the overnight rsync+zip script
+    # Extracting one zip file is ~2-3 minutes vs hours for rsync
+    if not local_crops_dir.exists() or not any(local_crops_dir.iterdir()):
+        if not zip_path.exists():
+            raise RuntimeError(
+                f"Zip not found at {zip_path}.\n"
+                "Run the rsync+zip script first to create unet_crops.zip on Drive."
+            )
+        print(f"\nExtracting crops from zip (~2-3 minutes)...")
+        local_crops_dir.parent.mkdir(parents=True, exist_ok=True)
+        ret = os.system(f"unzip -q '{zip_path}' -d /content/local_data/")
+        if ret != 0:
+            raise RuntimeError("Unzip failed. Check zip file integrity.")
+        print("Extraction complete.")
+    else:
+        print(f"\nLocal crops already exist, skipping extraction.")
+
     train_unet(
-        crops_dir   = crops_dir,
+        crops_dir   = local_crops_dir,
         splits_dir  = splits_dir,
         results_dir = results_dir,
         unet_size   = config['preprocessing']['unet_input_size'],
