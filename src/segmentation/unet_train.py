@@ -85,7 +85,7 @@ class KidneySegDataset(Dataset):
             crops_dir    : Path,
             index_path   : Path,
             augment      : bool = False,
-            healthy_ratio: int  = 3
+            healthy_ratio: int  = 2
         ):
 
         self.crops_dir = crops_dir
@@ -297,14 +297,15 @@ def validate(model, loader, loss_fn, device):
     return total_loss / n, total_dice / n, total_iou / n
 
 # Main model training
-def train_unet(crops_dir  : Path,
-               splits_dir : Path,
-               results_dir: Path,
-               unet_size  : int,
-               max_epochs : int = 150,
-               patience   : int = 30,
-               batch_size : int = 16,
-               lr         : float = 0.0001):
+def train_unet(crops_dir     : Path,
+               splits_dir    : Path,
+               results_dir   : Path,
+               unet_size     : int,
+               max_epochs    : int = 150,
+               patience      : int = 30,
+               batch_size    : int = 16,
+               lr            : float = 0.0001,
+               healthy_ratio : int = 2):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device           : {device}")
@@ -325,7 +326,7 @@ def train_unet(crops_dir  : Path,
         crops_dir     = crops_dir,
         index_path    = index_path,
         augment       = True,
-        healthy_ratio = 3
+        healthy_ratio = healthy_ratio
     )
 
     print("\nBuilding val dataset:")
@@ -334,7 +335,7 @@ def train_unet(crops_dir  : Path,
         crops_dir     = crops_dir,
         index_path    = index_path,
         augment       = False,
-        healthy_ratio = 3
+        healthy_ratio = healthy_ratio
     )
 
     # Data loaders
@@ -345,6 +346,7 @@ def train_unet(crops_dir  : Path,
     num_workers = 0,
     pin_memory  = False
     )
+
     val_loader = DataLoader(
     val_dataset,
     batch_size  = batch_size,
@@ -363,15 +365,9 @@ def train_unet(crops_dir  : Path,
     )
     model = model.to(device)
 
-    # Add dropout to encoder for regularisation
-    # Reduces overfitting on small medical datasets
-    for module in model.encoder.modules():
-        if isinstance(module, torch.nn.BatchNorm2d):
-            module.momentum = 0.01  # slower batch norm updates = more stable
-
     # Loss, optimizer, scheduler
     loss_fn   = DiceBCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
     # Cosine annealing scheduler smoothly reduces lr from 0.0001 to 1e-6 over training
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=max_epochs, eta_min=1e-6
@@ -499,14 +495,15 @@ def main():
         print(f"\nLocal crops already exist, skipping extraction.")
 
     train_unet(
-        crops_dir   = local_crops_dir,
-        splits_dir  = splits_dir,
-        results_dir = results_dir,
-        unet_size   = config['preprocessing']['unet_input_size'],
-        max_epochs  = 150,
-        patience    = 30,
-        batch_size  = 16,
-        lr          = 0.0001
+        crops_dir     = local_crops_dir,
+        splits_dir    = splits_dir,
+        results_dir   = results_dir,
+        unet_size     = config['preprocessing']['unet_input_size'],
+        max_epochs    = 150,
+        patience      = 30,
+        batch_size    = 16,
+        lr            = 0.0001,
+        healthy_ratio = 2
     )
 
 
