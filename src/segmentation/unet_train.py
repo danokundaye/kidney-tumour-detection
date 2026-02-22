@@ -98,7 +98,7 @@ class KidneySegDataset(Dataset):
         index_df = index_df[index_df['case_id'].isin(case_ids)]
 
         # Separate abnormal and healthy slices
-        abnormal_df = index_df[index_df['region_type'] == 'abnormal']
+        abnormal_df = index_df[index_df['region_type'].isin(['tumour', 'cyst'])]
         healthy_df  = index_df[index_df['region_type'] == 'healthy']
 
         abnormal_slices = abnormal_df.to_dict('records')
@@ -363,9 +363,15 @@ def train_unet(crops_dir  : Path,
     )
     model = model.to(device)
 
+    # Add dropout to encoder for regularisation
+    # Reduces overfitting on small medical datasets
+    for module in model.encoder.modules():
+        if isinstance(module, torch.nn.BatchNorm2d):
+            module.momentum = 0.01  # slower batch norm updates = more stable
+
     # Loss, optimizer, scheduler
     loss_fn   = DiceBCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     # Cosine annealing scheduler smoothly reduces lr from 0.0001 to 1e-6 over training
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=max_epochs, eta_min=1e-6
