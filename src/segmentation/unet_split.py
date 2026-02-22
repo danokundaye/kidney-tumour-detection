@@ -85,7 +85,7 @@ def main():
 
     splits_dir  = Path(config['paths']['splits_dir'])
     crops_dir   = Path(config['paths']['unet_crops_dir'])
-    kits_json   = Path(config['paths'][' kits_root']) / "kits.json"
+    kits_json   = Path(config['paths']['kits_root']) / "kits.json"
 
     print("Step 6.3 — U-Net Data Splitting")
 
