@@ -346,17 +346,19 @@ def train_unet(crops_dir  : Path,
     # Data loaders
     train_loader = DataLoader(
         train_dataset,
-        batch_size  = batch_size,
-        shuffle     = True,
-        num_workers = 4,
-        pin_memory  = True
+        batch_size        = batch_size,
+        shuffle           = True,
+        num_workers       = 4,
+        pin_memory        = True,
+        persistent_workers= True
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size  = batch_size,
-        shuffle     = False,
-        num_workers = 4,
-        pin_memory  = True
+        batch_size        = batch_size,
+        shuffle           = False,
+        num_workers       = 4,
+        pin_memory        = True,
+        persistent_workers= True
     )
 
     # Model: U-Net with ResNet50 encoder
@@ -474,30 +476,18 @@ def main():
     config      = load_config(config_path)
 
     # Local storage paths — read from local for speed
-    local_crops_dir = Path("/content/local_data/unet_crops")
-    splits_dir      = Path(config['paths']['splits_dir'])
-    results_dir     = Path(config['paths']['results_dir']) / "phase6_unet"
+    # Read directly from Drive — use RAM caching in DataLoader instead
+    crops_dir   = Path(config['paths']['unet_crops_dir'])
+    splits_dir  = Path(config['paths']['splits_dir'])
+    results_dir = Path(config['paths']['results_dir']) / "phase6_unet"
 
     # Drive crops path for rsync
     drive_crops_dir = Path(config['paths']['unet_crops_dir'])
 
     print("Step 6.4 — U-Net Segmentation Training")
 
-    # Copy crops to local storage if not already present
-    if not local_crops_dir.exists() or not any(local_crops_dir.iterdir()):
-        print("\nCopying unet_crops to local storage (~210MB)...")
-        local_crops_dir.mkdir(parents=True, exist_ok=True)
-        src = str(drive_crops_dir) + "/"
-        dst = str(local_crops_dir) + "/"
-        ret = os.system(f"rsync -a --info=progress2 '{src}' '{dst}'")
-        if ret != 0:
-            raise RuntimeError("rsync failed. Check Drive mount.")
-        print("Crops copied to local storage.")
-    else:
-        print("\nLocal crops already exist, skipping copy.")
-
     train_unet(
-        crops_dir   = local_crops_dir,
+        crops_dir   = crops_dir,
         splits_dir  = splits_dir,
         results_dir = results_dir,
         unet_size   = config['preprocessing']['unet_input_size'],
