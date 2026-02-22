@@ -13,7 +13,7 @@
 #
 # Execution: Google Colab
 #
-# OUTPUT STRUCTURE:
+# Output Structure:
 #   processed/splits/
 #   ├── yolo_train.txt         (paths to ~51,400 training images)
 #   ├── yolo_val.txt           (paths to ~5,200 validation images)
