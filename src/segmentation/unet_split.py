@@ -129,7 +129,7 @@ def main():
     # This ensures both train and val sets get proportional tumour/cyst/healthy cases
     train_ids, val_ids = train_test_split(
         df['case_id'].tolist(),
-        test_size    = 12,          # exactly 12 val cases
+        test_size    = 24,          # exactly 12 val cases
         random_state = 42,
         stratify     = df['abnormality'].tolist()
     )
