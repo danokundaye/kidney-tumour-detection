@@ -11,6 +11,7 @@ paths:
 
   # Where processed and output data will go
   processed_root: "/content/drive/MyDrive/kidney-tumour-detection/dataset/processed"
+  results_dir: "/content/drive/MyDrive/kidney-tumour-detection/results"
 
   # Subfolders that will be created during preprocessing
   splits_dir: "/content/drive/MyDrive/kidney-tumour-detection/dataset/processed/splits"
