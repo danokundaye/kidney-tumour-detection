@@ -198,7 +198,7 @@ def process_case(
                 continue
             box = boxes[slice_name]
         
-        x1, x2, y1, y2 = box
+        x1, y1, x2, y2 = box
 
         # Crop image and mask using identical coordinates
         cropped_image = image[y1:y2, x1:x2]
@@ -211,15 +211,18 @@ def process_case(
     
         # Resize to 256x256
         cropped_image_resized = np.array(Image.fromarray(cropped_image).resize(
+            (unet_size, unet_size), Image.BILINEAR))
+        
+        cropped_mask_resized = np.array(Image.fromarray(cropped_mask).resize(
             (unet_size, unet_size), Image.NEAREST))
         
         # Create binary mask and determine region type
-        binary_mask, region_type = create_binary_mask(cropped_image_resized)
+        binary_mask, region_type = create_binary_mask(cropped_mask_resized)
 
         # Save outputs
-        out_image_path = output_images_dir /   slice_name
-        out_mask_path = output_masks_dir   /   slice_name
-        out_region_path = output_regions_dir / slice_name
+        out_image_path  = output_images_dir  /   slice_name
+        out_mask_path   = output_masks_dir   /   slice_name
+        out_region_path = output_regions_dir /   slice_name.replace(".png", ".txt")
 
         # Save image as grayscale
         Image.fromarray(cropped_image_resized).save(out_image_path)
@@ -227,7 +230,7 @@ def process_case(
         # Save binary mask
         # Multiply by 255 for PNG visibility
         # Store as 0/255 PNG but loaded as 0/1 during training
-        Image.fromarray(binary_mask).save(out_mask_path)
+        Image.fromarray((binary_mask * 255).astype(np.uint8)).save(out_mask_path)
 
         # Save region type as .txt
         out_region_path.write_text(region_type)
