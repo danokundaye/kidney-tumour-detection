@@ -134,22 +134,22 @@ class KidneySegDataset(Dataset):
 
         # Augmentation pipeline for training
         self.train_transform = A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.Rotate(limit=15, p=0.5),
+            A.HorizontalFlip(p = 0.5),
+            A.Rotate(limit = 15, p = 0.5),
             A.RandomBrightnessContrast(
-                brightness_limit=0.2,
-                contrast_limit=0.2,
-                p=0.5
+                brightness_limit = 0.2,
+                contrast_limit = 0.2,
+                p = 0.5
             ),
-            A.GaussNoise(var_limit=(0.0, 0.01), p=0.3),
-            A.ElasticTransform(p=0.3),
-            A.Normalize(mean=[0.485], std=[0.229]),
+            A.GaussNoise(p = 0.3),
+            A.ElasticTransform(p = 0.3),
+            A.Normalize(mean = [0.485], std = [0.229]),
             ToTensorV2()
         ])
 
         # Validation — only normalize, no augmentation
         self.val_transform = A.Compose([
-            A.Normalize(mean=[0.485], std=[0.229]),
+            A.Normalize(mean = [0.485], std = [0.229]),
             ToTensorV2()
         ])
 
@@ -484,7 +484,7 @@ def main():
     print("Step 6.4 — U-Net Segmentation Training")
 
     # Copy crops to local storage if not already present
-    if not local_crops_dir.exists():
+    if not local_crops_dir.exists() or not any(local_crops_dir.iterdir()):
         print("\nCopying unet_crops to local storage (~210MB)...")
         local_crops_dir.mkdir(parents=True, exist_ok=True)
         src = str(drive_crops_dir) + "/"
