@@ -9,7 +9,7 @@
 #   - Output  : Binary segmentation mask (0 = healthy, 1 = abnormal)
 #
 # Steps:
-#   - Sample healthy slices at 3:1 ratio vs abnormal to reduce class imbalance
+#   - Sample healthy slices at 3:1 ratio with abnormal to reduce class imbalance
 #   - Combined Dice + BCE loss
 #   - Adam optimizer, lr=0.0001, cosine annealing schedule
 #   - Early stopping: patience = 30 epochs based on validation Dice
