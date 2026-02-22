@@ -85,86 +85,69 @@ class KidneySegDataset(Dataset):
         self.crops_dir = crops_dir
         self.augment   = augment
 
-        # Separate slices into abnormal and healthy
-        abnormal_slices = []
-        healthy_slices  = []
+        # Load index CSV — one file read instead of 17,382
+        index_df = pd.read_csv(index_path)
 
-        for case_id in case_ids:
-            images_dir  = crops_dir / case_id / "images"
-            regions_dir = crops_dir / case_id / "region_types"
+        # Filter to only cases in this split
+    index_df = index_df[index_df['case_id'].isin(case_ids)]
 
-            if not images_dir.exists():
-                continue
+    # Separate abnormal and healthy slices
+    abnormal_df = index_df[index_df['region_type'].isin(['tumour', 'cyst'])]
+    healthy_df  = index_df[index_df['region_type'] == 'healthy']
 
-            for img_path in sorted(images_dir.glob("*.png")):
-                slice_name   = img_path.stem
-                region_file  = regions_dir / f"{slice_name}.txt"
+    abnormal_slices = abnormal_df.to_dict('records')
+    healthy_slices  = healthy_df.to_dict('records')
 
-                if region_file.exists():
-                    region_type = region_file.read_text().strip()
-                else:
-                    region_type = "none"
+    # Sample healthy slices at healthy_ratio:1
+    n_abnormal       = len(abnormal_slices)
+    n_healthy_sample = min(len(healthy_slices), n_abnormal * healthy_ratio)
 
-                entry = {
-                    'case_id'    : case_id,
-                    'slice_name' : img_path.name,
-                    'image_path' : img_path,
-                    'mask_path'  : crops_dir / case_id / "masks" / img_path.name,
-                    'region_type': region_type
-                }
+    random.seed(42)
+    sampled_healthy = random.sample(healthy_slices, n_healthy_sample)
 
-                if region_type in ("tumour_only", "cyst_only", "both"):
-                    abnormal_slices.append(entry)
-                else:
-                    healthy_slices.append(entry)
+    self.slices = abnormal_slices + sampled_healthy
+    random.shuffle(self.slices)
 
-        # Sample healthy slices to achieve healthy_ratio:1
-        n_abnormal       = len(abnormal_slices)
-        n_healthy_sample = min(len(healthy_slices), n_abnormal * healthy_ratio)
+    print(f"  Abnormal slices  : {n_abnormal}")
+    print(f"  Healthy slices   : {n_healthy_sample} (sampled from {len(healthy_slices)})")
+    print(f"  Total slices     : {len(self.slices)}")
 
-        random.seed(42)
-        sampled_healthy = random.sample(healthy_slices, n_healthy_sample)
+    # Augmentation pipeline
+    self.train_transform = A.Compose([
+        A.HorizontalFlip(p=0.5),
+        A.Rotate(limit=15, p=0.5),
+        A.RandomBrightnessContrast(
+            brightness_limit=0.2,
+            contrast_limit=0.2,
+            p=0.5
+        ),
+        A.GaussNoise(p=0.3),
+        A.ElasticTransform(p=0.3),
+        A.Normalize(mean=[0.485], std=[0.229]),
+        ToTensorV2()
+    ])
 
-        self.slices = abnormal_slices + sampled_healthy
-        random.shuffle(self.slices)
-
-        print(f"  Abnormal slices  : {n_abnormal}")
-        print(f"  Healthy slices   : {n_healthy_sample} (sampled from {len(healthy_slices)})")
-        print(f"  Total slices     : {len(self.slices)}")
-
-        # Augmentation pipeline for training
-        self.train_transform = A.Compose([
-            A.HorizontalFlip(p = 0.5),
-            A.Rotate(limit = 15, p = 0.5),
-            A.RandomBrightnessContrast(
-                brightness_limit = 0.2,
-                contrast_limit = 0.2,
-                p = 0.5
-            ),
-            A.GaussNoise(p = 0.3),
-            A.ElasticTransform(p = 0.3),
-            A.Normalize(mean = [0.485], std = [0.229]),
-            ToTensorV2()
-        ])
-
-        # Validation — only normalize, no augmentation
-        self.val_transform = A.Compose([
-            A.Normalize(mean = [0.485], std = [0.229]),
-            ToTensorV2()
-        ])
+    self.val_transform = A.Compose([
+        A.Normalize(mean=[0.485], std=[0.229]),
+        ToTensorV2()
+    ])
 
     def __len__(self):
         return len(self.slices)
 
     def __getitem__(self, idx):
-        entry = self.slices[idx]
+        entry      = self.slices[idx]
+        case_id    = entry['case_id']
+        slice_name = entry['slice_name']
 
-        # Load image as grayscale, convert to RGB for ResNet50
-        # ResNet50 expects 3-channel input
-        image = np.array(Image.open(entry['image_path']).convert('RGB'))
+        image_path = self.crops_dir / case_id / "images" / slice_name
+        mask_path  = self.crops_dir / case_id / "masks"  / slice_name
 
-        # Load binary mask stored as 0/255, convert to 0/1
-        mask = np.array(Image.open(entry['mask_path']))
+        # Load image as RGB for ResNet50
+        image = np.array(Image.open(image_path).convert('RGB'))
+
+        # Load binary mask — stored as 0/255, convert to 0/1
+        mask = np.array(Image.open(mask_path))
         mask = (mask > 127).astype(np.float32)  # threshold at 127 → 0 or 1
 
         # Apply transforms
@@ -326,20 +309,24 @@ def train_unet(crops_dir  : Path,
     print(f"\nTrain cases      : {len(train_cases)}")
     print(f"Val cases        : {len(val_cases)}")
 
+    index_path = splits_dir / "unet_crops_index.csv"
+
     # Build datasets
     print("\nBuilding train dataset:")
     train_dataset = KidneySegDataset(
-        case_ids = train_cases,
-        crops_dir = crops_dir,
-        augment   = True,
+        case_ids      = train_cases,
+        crops_dir     = crops_dir,
+        index_path    = index_path,
+        augment       = True,
         healthy_ratio = 3
     )
 
     print("\nBuilding val dataset:")
     val_dataset = KidneySegDataset(
-        case_ids = val_cases,
-        crops_dir = crops_dir,
-        augment   = False,
+        case_ids      = val_cases,
+        crops_dir     = crops_dir,
+        index_path    = index_path,
+        augment       = False,
         healthy_ratio = 3
     )
 
