@@ -333,20 +333,18 @@ def train_unet(crops_dir  : Path,
 
     # Data loaders
     train_loader = DataLoader(
-        train_dataset,
-        batch_size        = batch_size,
-        shuffle           = True,
-        num_workers       = 4,
-        pin_memory        = True,
-        persistent_workers= True
+    train_dataset,
+    batch_size  = batch_size,
+    shuffle     = True,
+    num_workers = 0,
+    pin_memory  = True
     )
     val_loader = DataLoader(
-        val_dataset,
-        batch_size        = batch_size,
-        shuffle           = False,
-        num_workers       = 4,
-        pin_memory        = True,
-        persistent_workers= True
+    val_dataset,
+    batch_size  = batch_size,
+    shuffle     = False,
+    num_workers = 0,
+    pin_memory  = True
     )
 
     # Model: U-Net with ResNet50 encoder
