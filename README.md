@@ -115,7 +115,7 @@ Sets up the cloud environment where all model training runs.
 
 **1. Activate Google One Premium**
 
-**2. Open the session setup notebook first — every session**
+**2. Open the session setup notebook**
 ```
 notebooks/kidney_tumour_pipeline.ipynb
 ```
