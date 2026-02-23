@@ -87,21 +87,15 @@ def infer(model, img_np):
     return (prob.squeeze().cpu().numpy() > THRESHOLD).astype(np.uint8)
 
 def binary_gt(mask):
-    """
-    Collapse GT to binary: tumour+cyst pixels = 255, rest = 0.
-    """
-    out = np.zeros_like(mask)
-    out[(mask == TUMOUR_VAL) | (mask == CYST_VAL)] = 255
-    return out
+    return mask
 
 def multiclass_gt(mask):
     """
-    Convert GT to RGB: kidney=green, tumour=red, cyst=blue.
+    unet_crops masks are binary — no class distinction available.
+    Show abnormal regions in red on black background as best alternative.
     """
     rgb = np.zeros((*mask.shape, 3), dtype=np.uint8)
-    rgb[mask == KIDNEY_VAL] = [0,   200, 0  ]
-    rgb[mask == TUMOUR_VAL] = [220, 0,   0  ]
-    rgb[mask == CYST_VAL]   = [0,   100, 220]
+    rgb[mask == 255] = [220, 0, 0]   # Red for abnormal
     return rgb
 
 def make_overlay(img_np, pred):
@@ -138,9 +132,10 @@ def select_slices(case_dir):
     tumour, cyst, kidney = [], [], []
     for f in sorted((case_dir / "masks").glob("*.png")):
         m = load_mask(f)
-        if   np.any(m == TUMOUR_VAL): tumour.append(f.stem)
-        elif np.any(m == CYST_VAL):   cyst.append(f.stem)
-        elif np.any(m == KIDNEY_VAL): kidney.append(f.stem)
+        if np.any(m == 255):
+            tumour.append(f.stem)   # abnormal slices (was tumour+cyst combined)
+        elif np.any(m > 0):
+            kidney.append(f.stem)   # shouldn't exist but kept as fallback
 
     selected = []
     for group in [tumour, cyst, kidney]:
@@ -184,11 +179,9 @@ def save_grid(rows, case_id, mode, out_path, meta):
     if mode == 'multiclass':
         fig.legend(
             handles=[
-                mpatches.Patch(color=(0, 200/255, 0),       label='Kidney'),
-                mpatches.Patch(color=(220/255, 0, 0),       label='Tumour'),
-                mpatches.Patch(color=(0, 100/255, 220/255), label='Cyst'),
+                mpatches.Patch(color=(220/255, 0, 0), label='Abnormal (tumour/cyst combined)'),
             ],
-            loc='lower center', ncol=3, fontsize=11, bbox_to_anchor=(0.5, 0.0)
+            loc='lower center', ncol=1, fontsize=11, bbox_to_anchor=(0.5, 0.0)
         )
 
     fig.suptitle(
