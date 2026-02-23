@@ -33,7 +33,6 @@
 #   - results/phase6_unet/weights/best.pt    Best model by val Dice
 #   - results/phase6_unet/weights/last.pt    Final epoch model
 #   - results/phase6_unet/metrics.csv        Per-epoch metrics log
-# =============================================================================
 
 import os
 import csv
