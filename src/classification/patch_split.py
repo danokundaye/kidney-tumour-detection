@@ -38,7 +38,7 @@ def main():
     splits_dir = Path(config['paths']['splits_dir'])
     index_csv  = splits_dir / "patches_index.csv"
 
-    seed = config['training']['random_seed']
+    seed = config['dataset']['random_seed']
 
     print("Step 7.2 — EfficientNet Train/Val Split")
 
