@@ -98,3 +98,8 @@ efficientnet:
   classification_threshold: 0.5
   patience: 5               # Epochs before reducing LR on plateau
 
+# Classification preparation
+classification:
+  dice_threshold: 0.4
+  patch_size: 224
+  box_margin: 0.10
