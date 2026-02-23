@@ -306,7 +306,7 @@ def main():
     slices_dir  = Path(config['paths']['slices_dir']) / "segmentation_train"
     patches_dir = Path(config['paths']['patches_dir'])
     splits_dir  = Path(config['paths']['splits_dir'])
-    checkpoint  = Path(config['paths']['checkpoints_dir']) / "phase6_unet" / "best.pt"
+    checkpoint  = Path(config['paths']['results_dir']) / "phase6_unet" / "weights" / "best.pt"
     kits_json   = Path(config['paths']['kits_root']) / "kits.json"
 
     # Settings
