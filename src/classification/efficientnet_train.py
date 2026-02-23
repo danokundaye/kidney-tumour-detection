@@ -60,9 +60,11 @@ class PatchDataset(Dataset):
     Applies augmentation during training only
     Oversamples benign patches by oversample_factor in training
     """
-    def __init__(self, df, local_patches_dir, augment = False, oversample_factor = 1):
+    def __init__(self, df, local_patches_dir, drive_patches_dir, augment = False, oversample_factor = 1):
         # Remap patch paths from Drive to local storage
         self.local_patches_dir = Path(local_patches_dir)
+        self.drive_patches_dir = str(drive_patches_dir)
+
         df = df.copy()
         # Remap path so DataLoader hits local storage instead of Drive
         df['local_path'] = df['patch_path'].apply(self._remap_path)
@@ -97,10 +99,8 @@ class PatchDataset(Dataset):
         """
         Replace Drive patches dir with local patches dir in path
         """
-        config = "/content/kidney-tumour-detection/configs/config.yaml"
-        drive_patches = config['paths']['patches_dir']
-        local_path    = drive_path.replace(drive_patches, str(self.local_patches_dir))
-        return local_path
+        return drive_path.replace(self.drive_patches_dir, str(self.local_patches_dir))
+
 
     def __len__(self):
         return len(self.df)
@@ -208,6 +208,7 @@ def main():
     config      = load_config(config_path)
     
     splits_dir    = Path(config['paths']['splits_dir'])
+    patches_dir   = Path(config['paths']['patches_dir'])
     results_dir   = Path(config['paths']['results_dir']) / "phase7_efficientnet"
     weights_dir   = results_dir / "weights"
     metrics_dir   = results_dir / "metrics"
@@ -243,9 +244,9 @@ def main():
     print(f"Oversample factor (benign): {oversample_factor}x")
 
     # Datasets
-    train_dataset = PatchDataset(train_df, local_patches,
+    train_dataset = PatchDataset(train_df, local_patches, patches_dir,
                                  augment = True, oversample_factor=oversample_factor)
-    val_dataset   = PatchDataset(val_df,   local_patches,
+    val_dataset   = PatchDataset(val_df,   local_patches, patches_dir,
                                  augment = False, oversample_factor=1)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
