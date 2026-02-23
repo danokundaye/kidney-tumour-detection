@@ -21,14 +21,14 @@ import torch
 import segmentation_models_pytorch as smp
 from tqdm import tqdm
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# Paths
 DRIVE_ROOT  = Path("/content/drive/MyDrive/kidney-tumour-detection")
 CROPS_DIR   = DRIVE_ROOT / "dataset/processed/unet_crops"
 VAL_CSV     = DRIVE_ROOT / "dataset/processed/splits/unet_val.csv"
 CHECKPOINT  = DRIVE_ROOT / "results/phase6_unet/weights/best.pt"
 OUT_DIR     = DRIVE_ROOT / "results/phase6_unet/visualizations"
 
-# ── Settings ──────────────────────────────────────────────────────────────────
+# Settings
 MAX_SLICES  = 8       # Max slices to show per case
 THRESHOLD   = 0.5     # Binary prediction threshold
 IMG_SIZE    = 256
@@ -38,7 +38,7 @@ DEVICE      = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 KIDNEY_VAL, TUMOUR_VAL, CYST_VAL = 85, 170, 255
 
 
-# ── Load model ────────────────────────────────────────────────────────────────
+# Load model
 def load_model():
     model = smp.Unet(
         encoder_name    = "resnet50",
@@ -56,20 +56,30 @@ def load_model():
     return model
 
 
-# ── Per-slice helpers ─────────────────────────────────────────────────────────
+# Per-slice helpers
 def load_image(path):
-    """Load PNG crop as float32 numpy array [0,1], shape (H,W)."""
-    img = Image.open(path).convert("L").resize((IMG_SIZE, IMG_SIZE), Image.BILINEAR)
-    return np.array(img, dtype=np.float32) / 255.0
+    """
+    Load PNG crop and normalize to match Phase 6 training preprocessing.
+    Training used A.Normalize(mean=[0.485], std=[0.229]):
+      output = (pixel/255 - mean) / std
+    """
+    img       = Image.open(path).convert("L").resize((IMG_SIZE, IMG_SIZE), Image.BILINEAR)
+    img_float = np.array(img, dtype=np.float32) / 255.0
+    img_norm  = (img_float - 0.485) / 0.229
+    return img_norm
 
 def load_mask(path):
-    """Load PNG mask preserving original pixel values (0,85,170,255)."""
+    """
+    Load PNG mask preserving original pixel values (0,85,170,255).
+    """
     mask = Image.open(path).convert("L").resize((IMG_SIZE, IMG_SIZE), Image.NEAREST)
     return np.array(mask, dtype=np.uint8)
 
 @torch.no_grad()
 def infer(model, img_np):
-    """Run U-Net inference. Returns binary prediction mask (H,W) uint8."""
+    """
+    Run U-Net inference. Returns binary prediction mask (H,W) uint8.
+    """
     t = torch.from_numpy(
         np.stack([img_np, img_np, img_np])  # repeat grayscale → 3 channels
     ).unsqueeze(0).to(DEVICE)               # (1, 3, H, W)
@@ -77,13 +87,17 @@ def infer(model, img_np):
     return (prob.squeeze().cpu().numpy() > THRESHOLD).astype(np.uint8)
 
 def binary_gt(mask):
-    """Collapse GT to binary: tumour+cyst pixels = 255, rest = 0."""
+    """
+    Collapse GT to binary: tumour+cyst pixels = 255, rest = 0.
+    """
     out = np.zeros_like(mask)
     out[(mask == TUMOUR_VAL) | (mask == CYST_VAL)] = 255
     return out
 
 def multiclass_gt(mask):
-    """Convert GT to RGB: kidney=green, tumour=red, cyst=blue."""
+    """
+    Convert GT to RGB: kidney=green, tumour=red, cyst=blue.
+    """
     rgb = np.zeros((*mask.shape, 3), dtype=np.uint8)
     rgb[mask == KIDNEY_VAL] = [0,   200, 0  ]
     rgb[mask == TUMOUR_VAL] = [220, 0,   0  ]
@@ -91,19 +105,24 @@ def multiclass_gt(mask):
     return rgb
 
 def make_overlay(img_np, pred):
-    """Overlay predicted regions in red on the grayscale crop."""
-    rgb = (np.stack([img_np]*3, axis=-1) * 255).astype(np.uint8)
+    """
+    Rescale normalized image to [0,1] before converting to RGB for display.
+    """
+    img_display = (img_np - img_np.min()) / (img_np.max() - img_np.min() + 1e-8)
+    rgb = (np.stack([img_display]*3, axis=-1) * 255).astype(np.uint8)
     rgb[pred == 1] = [220, 30, 30]
     return rgb
 
 def compute_dice(pred, gt_bin):
-    """Dice coefficient. Returns 1.0 if both masks are empty."""
+    """
+    Dice coefficient. Returns 1.0 if both masks are empty
+    """
     g = (gt_bin > 0).astype(np.uint8)
     s = pred.sum() + g.sum()
     return float(2 * (pred * g).sum() / s) if s > 0 else 1.0
 
 
-# ── Slice selection ───────────────────────────────────────────────────────────
+# Slice selection
 def select_slices(case_dir):
     """
     Select up to MAX_SLICES slice stems per case.
@@ -132,7 +151,7 @@ def select_slices(case_dir):
     return selected
 
 
-# ── Grid generation ───────────────────────────────────────────────────────────
+# Grid generation
 def save_grid(rows, case_id, mode, out_path, meta):
     """
     Save a (n_slices × 4) grid image for one case.
@@ -148,7 +167,7 @@ def save_grid(rows, case_id, mode, out_path, meta):
         axes[0, col].set_title(title, fontsize=13, fontweight='bold', pad=8)
 
     for i, row in enumerate(rows):
-        axes[i, 0].imshow(row['img'],     cmap='gray', vmin=0, vmax=1)
+        axes[i, 0].imshow(row['img'], cmap='gray')
         axes[i, 2].imshow(row['pred'],    cmap='gray', vmin=0, vmax=1)
         axes[i, 3].imshow(row['overlay'])
         axes[i, 0].set_ylabel(row['slice_name'], fontsize=8,
@@ -181,11 +200,9 @@ def save_grid(rows, case_id, mode, out_path, meta):
     plt.close(fig)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# Main
 def main():
-    print("=" * 60)
-    print("Step 6.7 — U-Net Inference Visualisation")
-    print("=" * 60)
+    print("Step 6.7 — U-Net Inference Visualisation\n")
 
     (OUT_DIR / "binary").mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "multiclass").mkdir(parents=True, exist_ok=True)
@@ -241,8 +258,7 @@ def main():
     df = pd.DataFrame(metrics)
     df.to_csv(OUT_DIR / "summary_metrics.csv", index=False)
 
-    print("\n" + "=" * 60)
-    print(f"Cases visualised : {len(df)}")
+    print(f"\nCases visualised : {len(df)}")
     print(f"Overall mean Dice: {df['mean_dice'].mean():.4f}")
     print(f"Output saved to  : {OUT_DIR}")
     print("\nPer-case summary:")
