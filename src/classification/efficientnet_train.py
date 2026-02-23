@@ -190,7 +190,7 @@ def run_epoch(model, loader, criterion, optimizer, config, device, is_train):
                 optimizer.step()
 
             total_loss += loss.item() * len(labels)
-            all_probs.extend(torch.sigmoid(logits).cpu().numpy())
+            all_probs.extend(torch.sigmoid(logits).detach().cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 
     avg_loss = total_loss / len(all_labels)
