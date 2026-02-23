@@ -263,7 +263,7 @@ def main():
     print(f"Output saved to  : {OUT_DIR}")
     print("\nPer-case summary:")
     print(df[['case_id', 'abnormality', 'slices_shown', 'mean_dice']].to_string(index=False))
-    print("\n✓ Done.")
+    print("\n Done.")
 
 if __name__ == "__main__":
     main()
