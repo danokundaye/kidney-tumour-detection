@@ -271,6 +271,11 @@ def compute_shap_values(wrapper: nn.Module, background: torch.Tensor,
         # squeeze output class dimension if present
         if isinstance(shap_vals, list):
             shap_vals = shap_vals[0]
+        # remove any trailing dimensions of size 1
+        shap_vals = np.squeeze(shap_vals)
+        # ensure shape is (n_batch, 3, 224, 224)
+        if shap_vals.ndim == 3:
+            shap_vals = shap_vals[np.newaxis, ...]
 
         all_shap.append(shap_vals)
         print(f"  batch {start // batch_size + 1}: patches {start + 1} to {end} done")
