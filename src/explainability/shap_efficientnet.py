@@ -239,7 +239,7 @@ def compute_shap_values(wrapper: nn.Module, background: torch.Tensor,
                         device: torch.device,
                         batch_size: int = 5) -> np.ndarray:
     """
-    compute shap gradient explainer values for all test patches.
+    compute SHAP gradient explainer values for all test patches.
 
     Use gradient explainer instead of deep explainer because EfficientNet
     uses inplace operations (SiLU activations and residual += additions)
