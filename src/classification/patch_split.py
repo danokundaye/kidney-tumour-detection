@@ -83,6 +83,11 @@ def main():
     train_df = df[df['case_id'].isin(all_train_cases)].reset_index(drop = True)
     val_df   = df[df['case_id'].isin(all_val_cases)].reset_index(drop = True)
 
+    max_malignant = config['efficientnet']['max_malignant_train']
+    malignant_train = train_df[train_df['malignant'] == True].sample(n = max_malignant, random_state = seed)
+    benign_train    = train_df[train_df['malignant'] == False]
+    train_df        = pd.concat([malignant_train, benign_train], ignore_index = True)
+
     # Save
     train_df.to_csv(splits_dir / "efficientnet_train.csv", index = False)
     val_df.to_csv(  splits_dir / "efficientnet_val.csv",   index = False)
