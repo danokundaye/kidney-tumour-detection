@@ -461,12 +461,12 @@ def main():
 
     # cases to process
     cases = {
-        'case_00088': {'Dice': 0.6820, 'Note': 'best segmentation result'},
-        'case_00001': {'Dice': 0.0000, 'Note': 'contrast case poor segmentation'},
+        'case_00088': {'dice': 0.6820, 'note': 'best segmentation result'},
+        'case_00001': {'dice': 0.0000, 'note': 'contrast case poor segmentation'},
     }
 
     for case_id, info in cases.items():
-        print(f"\nProcessing {case_id} (dice={info['dice']}, {info['note']})")
+        print(f"\nProcessing {case_id} Dice={info['dice']}, {info['note']})")
 
         case_slices_dir = slices_dir / case_id / 'images'
         case_patches_dir = patches_dir / case_id
