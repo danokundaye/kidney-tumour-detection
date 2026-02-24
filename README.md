@@ -67,6 +67,10 @@ kidney-tumour-detection/
 │   │   ├── unet_split.py               # Step 6.3 — patient-level train/val split
 │   │   └── unet_train.py               # Step 6.4 — U-Net training with ResNet50 encoder
 │   ├── classification/                 # EfficientNet training
+│   │   ├── patch_preparation.py        # Step 7.1 — extract tumour patches from U-Net crops
+│   │   ├── patch_split.py              # Step 7.2 — patient-level train/val split
+│   │   ├── efficientnet_train.py       # Step 7.3 — EfficientNet-B0 training
+│   │   └── efficientnet_eval.py        # Step 7.4 — evaluation on val set
 │   ├── explainability/                 # SHAP integration
 │   └── evaluation/                     # Metrics and reporting
 │
@@ -134,6 +138,7 @@ notebooks/kidney_tumour_pipeline.ipynb
 notebooks/01_preprocessing.ipynb   ← Phase 4
 notebooks/02_yolo_training.ipynb   ← Phase 5
 notebooks/03_unet_training.ipynb   ← Phase 6
+notebooks/04_efficientnet_training.ipynb  ← Phase 7
 ...
 ```
 ---
@@ -176,7 +181,7 @@ Each case contains: imaging.nii.gz + segmentation.nii.gz
 | 4 | Preprocessing Pipeline | ✅ Complete |
 | 5 | YOLOv8 Detection Training | ✅ Complete |
 | 6 | U-Net Segmentation Training | ✅ Complete |
-| 7 | EfficientNet Classification Training | ⏳ Pending |
+| 7 | EfficientNet Classification Training | ✅ Complete |
 | 8 | SHAP Integration | ⏳ Pending |
 | 9 | End-to-End Pipeline Integration | ⏳ Pending |
 | 10 | Evaluation and Metrics | ⏳ Pending |
@@ -309,6 +314,84 @@ When passing detections to the segmentation stage:
 - **Case-level vs slice-level labels:** Using case-level abnormality as a proxy for slice-level region type introduced contradictory training signal — slices labeled abnormal but with empty masks. Slice-level labeling from mask pixels was explored but reduced training data too aggressively (1,232 vs 3,847 abnormal slices). Final approach retained case-level labels, relying on Dice+BCE loss to handle empty masks naturally
 - **Sampling ratio:** 3:1 and 2:1 healthy:abnormal ratios were evaluated. 2:1 produced slightly more stable training curves and was used in the final run
 - **Val Dice ceiling ~0.47:** Consistent across all runs, attributed to limited dataset size (120 cases), 2D slice-based processing losing volumetric context, and high case-to-case variability in the small validation set. The 0.80 target, based on literature using larger datasets and 3D volumetric training, was not achieved within the scope of this proof-of-concept
+
+---
+
+### Phase 7 — EfficientNet Classification Training (Complete)
+
+**Model:** EfficientNet-B0 (ImageNet pretrained, all layers fine-tuned)  
+**Final checkpoint:** `results/phase7_efficientnet/weights/best.pt`  
+**Training hardware:** NVIDIA A100 40GB, Google Colab Pro+
+
+#### Patch Preparation (Steps 7.1–7.2)
+
+Patches are 224×224 pixel crops of abnormal regions extracted from segmented CT slices. The classification task is patient-level binary classification — malignant (renal cell carcinoma) vs benign (non-cancerous solid tumour) — based on biopsy-confirmed histology labels from `kits.json`.
+
+**Hybrid patch extraction strategy:**  
+YOLO's 73.6% slice-level detection rate left 87 of 120 segmentation training cases with empty U-Net crops — the 20% bounding box margin was insufficient for tumours growing peripherally beyond the kidney boundary. To recover these cases, a hybrid approach was used:
+
+- **33 cases with valid U-Net crops:** Run U-Net inference. If Dice ≥ 0.40 vs ground truth → extract patch from predicted mask. If Dice < 0.40 → fall back to ground truth mask.
+- **87 cases with empty crops:** Extract directly from original slices using ground truth masks.
+
+| Source | Patches | Percentage |
+|--------|---------|------------|
+| U-Net predicted mask (Dice ≥ 0.40) | 906 | 18.2% |
+| Ground truth mask fallback | 4,081 | 81.8% |
+| **Total** | **4,987** | **100%** |
+
+**Dataset constraint — benign cases:**  
+KiTS21 contains only 25 benign cases out of 300 (8.3%). After patch preparation, only 5 benign cases produced patches above the minimum size threshold (10×10 pixels), giving a 27:1 malignant-to-benign patch imbalance.
+
+#### Patient-Level Split
+| Split | Malignant cases | Benign cases | Malignant patches | Benign patches |
+|-------|-----------------|--------------|-------------------|----------------|
+| Train | 74 | 4 | 3,827 | 125 |
+| Val | 19 | 1 | 983 | 52 |
+
+> **Note:** Val benign set is a single case (case_00156, 52 patches). Benign val metrics should be interpreted with caution given this constraint.
+
+#### Training Configuration (Final)
+| Parameter | Value |
+|-----------|-------|
+| Architecture | EfficientNet-B0, all layers trainable |
+| Loss | BCEWithLogitsLoss, benign class weight = 3.0 |
+| Optimizer | Adam, lr=0.0001 |
+| Scheduler | ReduceLROnPlateau (patience=5, factor=0.5) |
+| Early stopping patience | 10 epochs (on mean F1) |
+| Max epochs | 50 |
+| Batch size | 32 |
+| Benign oversampling | 15× |
+| Malignant patch cap | 375 (3:1 ratio before oversampling) |
+| Best epoch | 6 |
+
+#### Results (Final — Primary Experiment)
+
+| Metric | Value | Target | Notes |
+|--------|-------|--------|-------|
+| Accuracy | 0.858 | >85% | Met |
+| F1 Malignant | 0.922 | — | Strong |
+| F1 Benign | 0.205 | — | Constrained by dataset |
+| Sensitivity | 0.884 | >90% | Near target |
+| Specificity | 0.365 | — | Limited by 5 benign cases |
+| AUC | 0.829 | — | Genuine discriminative signal |
+
+#### Ablation Experiments
+
+Three configurations were compared to understand the effect of class weighting and data ratio:
+
+| Experiment | Data ratio | Class weight | Accuracy | F1 Benign | Sensitivity | Specificity | AUC |
+|------------|-----------|--------------|----------|-----------|-------------|-------------|-----|
+| Primary (3:1, w=3.0) | 375 mal / 125 ben | 3.0 | 0.858 | 0.205 | 0.884 | 0.365 | **0.829** |
+| Balanced (1:1, w=1.0) | 125 mal / 125 ben | 1.0 | 0.755 | 0.165 | 0.769 | 0.481 | 0.693 |
+| Balanced + weighted (1:1, w=3.0) | 125 mal / 125 ben | 3.0 | 0.890 | 0.230 | 0.920 | 0.327 | 0.778 |
+
+> **Key finding:** Class weight matters more than data ratio at this dataset size. The primary experiment achieves the best AUC (0.829) despite using more malignant training data — reducing malignant patches below what the benign data can support hurts generalisation. The AUC of 0.829 on a severely imbalanced val set confirms the architecture has learned genuine discriminative signal; reliable benign classification requires substantially more labelled benign cases than the 5 available in KiTS21.
+
+#### Key Lessons Learned
+- **Patient-level label limitation:** `malignant` in kits.json is a patient-level diagnosis, not per-lesion. Patches from the same patient are all labelled identically regardless of whether they contain tumour or cyst tissue — a known limitation requiring per-lesion pathology labels to resolve
+- **5 benign cases is the ceiling:** Oversampling, class weighting, or data ratio adjustment cannot overcome the limited benign training cases. The model consistently collapsed to predicting all-malignant without the malignant patch cap
+- **Malignant patch cap critical:** Without capping malignant at 375, the gradient signal from 3,827 malignant patches overwhelmed the 125 benign patches despite 15× oversampling and class weighting, causing F1 Benign to remain 0.0 across all epochs
+- **Mean F1 as primary metric:** Accuracy alone is misleading at 19:1 val imbalance; a model predicting malignant for everything scores 95% accuracy. Mean F1 of malignant and benign F1 penalises the model for ignoring either class
 
 ---
 

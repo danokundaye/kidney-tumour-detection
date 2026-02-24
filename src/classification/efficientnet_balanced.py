@@ -205,7 +205,7 @@ for epoch in range(1, epochs + 1):
             'val_f1'          : best_f1,
             'val_metrics'     : val_m,
         }, weights_dir / "best.pt")
-        print(f"  ✓ Best model saved (mean F1: {best_f1:.4f})")
+        print(f"  Best model saved (mean F1: {best_f1:.4f})")
         epochs_no_improve = 0
     else:
         epochs_no_improve += 1
