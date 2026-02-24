@@ -1,6 +1,6 @@
 # Phase 9 - End-to-End Inference Pipeline
 #
-#   Chains YOLO, U-Net, and EfficientNet on all 70 test cases.
+#   This script chains YOLO, U-Net, and EfficientNet on all 70 test cases.
 #   For each case:
 #     1. YOLO detects kidney region per slice at conf=0.10
 #     2. U-Net segments tumour boundaries on 256x256 crop
