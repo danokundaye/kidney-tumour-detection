@@ -239,10 +239,14 @@ def compute_shap_values(wrapper: nn.Module, background: torch.Tensor,
                         device: torch.device,
                         batch_size: int = 5) -> np.ndarray:
     """
-    Compute shap deep explainer values for all test patches.
+    compute shap gradient explainer values for all test patches.
+
+    Use gradient explainer instead of deep explainer because EfficientNet
+    uses inplace operations (SiLU activations and residual += additions)
+    that conflict with deep explainer's backward hooks.
 
     Processes in batches to avoid out of memory errors on t4.
-    returns numpy array of shape (n_test, 3, 224, 224).
+    Returns numpy array of shape (n_test, 3, 224, 224).
 
     SHAP values represent the contribution of each pixel channel
     to the model output relative to the background baseline.
@@ -250,7 +254,7 @@ def compute_shap_values(wrapper: nn.Module, background: torch.Tensor,
     Negative values push prediction toward benign.
     """
     background = background.to(device)
-    explainer  = shap.DeepExplainer(wrapper, background)
+    explainer  = shap.GradientExplainer(wrapper, background)
 
     all_shap = []
     n_test   = len(test_tensors)
@@ -269,10 +273,9 @@ def compute_shap_values(wrapper: nn.Module, background: torch.Tensor,
             shap_vals = shap_vals[0]
 
         all_shap.append(shap_vals)
-        print(f"  Batch {start // batch_size + 1}: patches {start + 1} to {end} done")
+        print(f"  batch {start // batch_size + 1}: patches {start + 1} to {end} done")
 
-    return np.concatenate(all_shap, axis = 0)
-
+    return np.concatenate(all_shap, axis=0)
 
 def visualize_shap(test_tensors: torch.Tensor,
                    shap_values : np.ndarray,
