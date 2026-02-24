@@ -82,6 +82,14 @@ def load_efficientnet(path: str, device: torch.device) -> nn.Module:
         model.load_state_dict(checkpoint)
     model = model.to(device)
     model.eval()
+
+    # Disable inplace activations to prevent SHAP deep explainer conflict.
+    # EfficientNet uses SiLU with inplace=True which causes gradient errors
+    # when SHAP hooks into the backward pass.
+    for module in model.modules():
+        if hasattr(module, 'inplace'):
+            module.inplace = False
+
     print(f"  EfficientNet loaded")
     return model
 
