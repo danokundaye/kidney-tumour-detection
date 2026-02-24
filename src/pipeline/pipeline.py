@@ -78,7 +78,7 @@ def load_unet(path: str, device: torch.device) -> nn.Module:
         in_channels     = 3,
         classes         = 1,
     )
-    checkpoint = torch.load(path, map_location=device)
+    checkpoint = torch.load(path, map_location = device, weights_only = False)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
     else:
@@ -101,7 +101,7 @@ def load_efficientnet(path: str, device: torch.device) -> nn.Module:
         nn.Dropout(p = 0.2),
         nn.Linear(in_features, 1)
     )
-    checkpoint = torch.load(path, map_location = device)
+    checkpoint = torch.load(path, map_location = device, weights_only = False)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
     else:
