@@ -94,7 +94,7 @@ def load_efficientnet(path: str, device: torch.device) -> nn.Module:
     Rebuild EfficientNet-B0 with same classifier head as phase 7,
     then load saved weights.
     """
-    print(f"  Loading efficientnet from: {path}...")
+    print(f"  Loading EfficientNet-B0 from: {path}...")
     model = models.efficientnet_b0(weights = None)
     in_features = model.classifier[1].in_features
     model.classifier = nn.Sequential(
