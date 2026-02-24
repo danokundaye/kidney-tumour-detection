@@ -43,7 +43,7 @@ class PatchDataset(Dataset):
 
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485], std=[0.229]),
+            transforms.Normalize(mean = [0.485], std = [0.229]),
         ])
 
     def _remap_path(self, drive_path):
@@ -56,20 +56,20 @@ class PatchDataset(Dataset):
     def __getitem__(self, idx):
         row   = self.df.iloc[idx]
         img   = Image.open(row['local_path']).convert("L")
-        label = torch.tensor(float(row['malignant']), dtype=torch.float32)
+        label = torch.tensor(float(row['malignant']), dtype = torch.float32)
         img   = self.transform(img).repeat(3, 1, 1)
         return img, label
 
 
 # Model
 def load_model(checkpoint, device):
-    model = models.efficientnet_b0(weights=None)
+    model = models.efficientnet_b0(weights = None)
     in_features = model.classifier[1].in_features
     model.classifier = nn.Sequential(
-        nn.Dropout(p=0.2),
+        nn.Dropout(p = 0.2),
         nn.Linear(in_features, 1)
     )
-    ckpt  = torch.load(checkpoint, map_location=device)
+    ckpt = torch.load(checkpoint, map_location = device, weights_only = False)
     model.load_state_dict(ckpt['model_state_dict'])
     model.to(device).eval()
     print(f"Loaded checkpoint from epoch {ckpt['epoch']}")
@@ -95,8 +95,8 @@ def main():
     # Load val set
     val_df  = pd.read_csv(splits_dir / "efficientnet_val.csv")
     dataset = PatchDataset(val_df, local_patches, patches_dir)
-    loader  = DataLoader(dataset, batch_size=batch_size,
-                         shuffle=False, num_workers=2, pin_memory=True)
+    loader  = DataLoader(dataset, batch_size = batch_size,
+                         shuffle=False, num_workers = 2, pin_memory = True)
 
     print(f"\nVal patches : {len(val_df)} "
           f"({val_df['malignant'].sum()} mal, {(~val_df['malignant']).sum()} ben)")
@@ -121,7 +121,7 @@ def main():
     all_preds  = (all_probs >= threshold).astype(int)
 
     # Metrics
-    tn, fp, fn, tp = confusion_matrix(all_labels, all_preds, labels=[0, 1]).ravel()
+    tn, fp, fn, tp = confusion_matrix(all_labels, all_preds, labels = [0, 1]).ravel()
 
     sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
@@ -133,8 +133,8 @@ def main():
 
     metrics = {
         'accuracy'    : round(float(accuracy_score(all_labels, all_preds)), 4),
-        'f1_malignant': round(float(f1_score(all_labels, all_preds, pos_label=1, zero_division=0)), 4),
-        'f1_benign'   : round(float(f1_score(all_labels, all_preds, pos_label=0, zero_division=0)), 4),
+        'f1_malignant': round(float(f1_score(all_labels, all_preds, pos_label = 1, zero_division = 0)), 4),
+        'f1_benign'   : round(float(f1_score(all_labels, all_preds, pos_label = 0, zero_division = 0)), 4),
         'sensitivity' : round(sensitivity, 4),
         'specificity' : round(specificity, 4),
         'auc'         : round(auc, 4),
@@ -156,7 +156,7 @@ def main():
     print(f"Actual Malignant{fn:4d}     {tp:4d}")
     print("\nClassification Report:")
     print(classification_report(all_labels, all_preds,
-                                 target_names=['benign', 'malignant'],
+                                 target_names = ['benign', 'malignant'],
                                  zero_division=0))
 
     # Save
