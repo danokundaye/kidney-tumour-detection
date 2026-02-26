@@ -47,7 +47,7 @@ This project implements a three-stage deep learning pipeline for automated detec
 kidney-tumour-detection/
 │
 ├── notebooks/                          # Google Colab training notebooks
-│   ├── kidney_tumour_pipeline.ipynb    # Session setup and data download
+│   ├── kidney_tumour_pipeline.ipynb    # Phases 2 & 3 — session setup and data download
 │   ├── 01_preprocessing.ipynb          # Phase 4 — data preparation and preprocessing
 │   ├── 02_yolo_training.ipynb          # Phase 5 — YOLOv8 detection training
 │   ├── 03_unet_training.ipynb          # Phase 6 — U-Net segmentation training
@@ -88,8 +88,8 @@ kidney-tumour-detection/
 │   ├── metrics/
 │   └── checkpoints/
 │
-├── requirements-local.txt              # Local development dependencies
-└── requirements-colab.txt              # Colab training dependencies
+├── requirements-colab.txt              # Colab training dependencies
+└── requirements-local.txt              # Local development dependencies
 ```
 ---
 
