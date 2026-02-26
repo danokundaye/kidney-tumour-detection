@@ -33,7 +33,8 @@ This project implements a three-stage deep learning pipeline for automated detec
 ### Dataset
 - **KiTS21** (Kidney Tumour Segmentation Challenge 2021)
 - 300 anonymized pre-operative CT cases
-- NIfTI format, 512×512 pixels per slice
+- NIfTI format, variable slice dimensions (width: 512 pixels, height: varies per case)
+- Slices per case: 29–1,059 (average ~544)
 - Patient-level split: 110 (detection) / 120 (segmentation) / 70 (testing)
 
 **Hardware:**
@@ -202,7 +203,7 @@ Each case contains: imaging.nii.gz + segmentation.nii.gz
 |------|--------|-------------|
 | 4.1 | data_exploration.py | Dataset audit — integrity, intensity stats, label distribution, histology counts |
 | 4.2 | data_splitting.py | Patient-level split — 110 detection / 120 segmentation / 70 test |
-| 4.3 | slice_extraction.py | NIfTI volumes → PNG slices (512×512), masks scaled to 0/85/170/255 |
+| 4.3 | slice_extraction.py | NIfTI volumes → PNG slices, masks scaled to 0/85/170/255 |
 | 4.4 | yolo_label_generation.py | YOLO bounding box labels — 56,604 slices, 21,814 boxes across 110 cases |
 | 4.5 | yolo_dataset_structure.py | train.txt, val.txt, yolo_data.yaml — stratified 100/10 split |
 
@@ -481,7 +482,7 @@ Each figure shows 3 rows (YOLO / U-Net / EfficientNet) × 3 columns (original / 
 The pipeline chains all three models sequentially on each CT case:
 
 ```
-CT slices (512×512)
+CT slices (native dimensions, width = 512px)
     → YOLO (conf=0.10) → bounding box (highest confidence, 20% expansion)
     → crop + resize to 256×256
     → U-Net → binary segmentation mask (threshold=0.5)
