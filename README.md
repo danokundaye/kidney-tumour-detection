@@ -25,7 +25,6 @@ This project implements a three-stage deep learning pipeline for automated detec
 - PyTorch 2.0+
 - Ultralytics YOLOv8
 - segmentation_models_pytorch
-- MONAI
 - EfficientNet-B0 (ImageNet pretrained, fine-tuned on KiTS21)
 - SHAP
 
@@ -249,7 +248,12 @@ The original 51,484 training images contained 63% background slices (no kidney v
 
 #### YOLO Retrain — Inference Model for Segmentation Handoff
 
-After Run 10, YOLO was retrained without the large-slice filter to improve detection across all slice sizes for the segmentation pipeline handoff. This retrain was evaluated on the 120 segmentation training cases.
+After Run 10, the filter-trained model was evaluated on the 120 segmentation training cases 
+to assess pipeline readiness. Slice-level detection on these cases was only 27.1%, as the 
+segmentation set contained proportionally more boundary and small-kidney slices that were 
+excluded by the large-slice filter during Run 10 training. YOLO was therefore retrained 
+without the large-slice filter to improve detection coverage across all slice sizes for the 
+segmentation pipeline handoff.
 
 **Final checkpoint:** `results/phase5_yolo_retrain/yolov8s_retrain_run1/weights/best.pt`
 
@@ -289,6 +293,9 @@ When passing detections to the segmentation stage:
 - **cls=1.5 loss weight** made model overly conservative, destroying recall
 - **Lower confidence threshold (0.10)** recovers missed detections without retraining — 70.7% → 94.3%
 - **Multiple boxes per slice** appear at conf=0.10 — always take highest confidence box for U-Net
+- **Filter-trained model insufficient for pipeline handoff:** Run 10's model achieved only 
+  27.1% slice-level detection on segmentation cases, necessitating a full retrain without 
+  the large-slice filter
 
 ---
 
