@@ -71,6 +71,7 @@ except ImportError:
     _TORCH_AVAILABLE = False
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB — covers large NIfTI volumes
 CORS(app)
 
 jobs: dict[str, dict] = {}
@@ -1252,7 +1253,7 @@ def health():
 
 # Entry point
 if __name__ == "__main__":
-    print("  Kidney Tumour Pipeline — Demo Backend") 
+    print("  Kidney Tumour Pipeline — Demo Backend")
 
     print("\nLoading models...")
     _load_models()
