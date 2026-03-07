@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const API = "https://compact-cities-narrow-cooperative.trycloudflare.com";
+const API = "https://unstraitened-uncustomarily-mariette.ngrok-free.dev";
+// ngrok requires this header to skip the browser warning page on free tier
+const NGROK_HEADERS = { "ngrok-skip-browser-warning": "true" };
 
 // File size threshold above which we warn the user (50MB)
 const LARGE_FILE_BYTES = 50 * 1024 * 1024;
@@ -1169,7 +1171,7 @@ export default function App() {
   // Polling — stops only when pipeline done AND SHAP not running
   const poll = useCallback(async (id) => {
     try {
-      const res = await fetch(`${API}/status/${id}`);
+      const res = await fetch(`${API}/status/${id}`, { headers: NGROK_HEADERS });
       const data = await res.json();
       setJobData(data);
 
@@ -1199,7 +1201,7 @@ export default function App() {
   const startFromCase = async (caseId) => {
     setError(null); setJobData(null); setJobId(null); setCancelling(false);
     try {
-      const res = await fetch(`${API}/run/${caseId}`, { method: "POST" });
+      const res = await fetch(`${API}/run/${caseId}`, { method: "POST", headers: NGROK_HEADERS });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start case");
       setJobId(data.job_id);
@@ -1245,6 +1247,7 @@ export default function App() {
     });
 
     xhr.open("POST", `${API}/upload`);
+    xhr.setRequestHeader("ngrok-skip-browser-warning", "true");
     xhr.send(form);
   };
 
@@ -1253,7 +1256,7 @@ export default function App() {
     if (!jobId || cancelling) return;
     setCancelling(true);
     try {
-      await fetch(`${API}/cancel/${jobId}`, { method: "POST" });
+      await fetch(`${API}/cancel/${jobId}`, { method: "POST", headers: NGROK_HEADERS });
     } catch {
       setCancelling(false);
     }
@@ -1263,7 +1266,7 @@ export default function App() {
   const triggerShap = async () => {
     if (!jobId) return;
     try {
-      await fetch(`${API}/shap/${jobId}`, { method: "POST" });
+      await fetch(`${API}/shap/${jobId}`, { method: "POST", headers: NGROK_HEADERS });
       setPolling(true);
     } catch {
       setError("SHAP request failed.");

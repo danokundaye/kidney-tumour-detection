@@ -74,6 +74,12 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB — covers large NIfTI volumes
 CORS(app, origins="*")
 
+@app.after_request
+def add_ngrok_header(response):
+    # Tells ngrok free tier to skip the browser warning page for all responses
+    response.headers["ngrok-skip-browser-warning"] = "true"
+    return response
+
 @app.errorhandler(413)
 def too_large(e):
     response = jsonify({"error": "File too large. Maximum upload size is 500MB."})
