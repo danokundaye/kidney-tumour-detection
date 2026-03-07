@@ -294,7 +294,7 @@ function CasePicker({ onSelect, disabled }) {
   const [fetchErr, setFetchErr] = useState(null);
 
   useEffect(() => {
-    fetch(`${API}/cases`)
+    fetch(`${API}/cases`, { headers: NGROK_HEADERS })
       .then(r => r.json())
       .then(data => { setCases(data); setLoading(false); })
       .catch(() => {
