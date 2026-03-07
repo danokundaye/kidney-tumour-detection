@@ -72,7 +72,14 @@ except ImportError:
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB — covers large NIfTI volumes
-CORS(app)
+CORS(app, origins="*")
+
+@app.errorhandler(413)
+def too_large(e):
+    response = jsonify({"error": "File too large. Maximum upload size is 500MB."})
+    response.status_code = 413
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
 
 jobs: dict[str, dict] = {}
 
@@ -1145,13 +1152,19 @@ def run_preloaded(case_id: str):
 
 @app.route("/upload", methods=["POST"])
 def upload():
+    # Debug — log exactly what Flask received
+    print(f"  UPLOAD content-type: {request.content_type}", flush=True)
+    print(f"  UPLOAD content-length: {request.content_length}", flush=True)
+    print(f"  UPLOAD files keys: {list(request.files.keys())}", flush=True)
+    print(f"  UPLOAD form keys: {list(request.form.keys())}", flush=True)
+    all_files = request.files.getlist("scan")
+    print(f"  UPLOAD scan count: {len(all_files)}", flush=True)
+    for f in all_files[:3]:
+        print(f"  UPLOAD file: {repr(f.filename)}", flush=True)
+
     files = request.files.getlist("scan")
     if not files or not any(f.filename for f in files):
         return jsonify({"error": "No files received. Send files under the key 'scan'."}), 400
-
-    # Debug — log filenames to help diagnose format detection issues
-    for f in files[:5]:
-        print(f"  UPLOAD filename: {repr(f.filename)}", flush=True)
 
     fmt, nifti_file = _detect_upload_format(files)
     if fmt == "unknown":
