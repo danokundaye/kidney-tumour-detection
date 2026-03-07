@@ -384,7 +384,7 @@ function CasePicker({ onSelect, disabled }) {
 
 // ── Upload zone ───────────────────────────────────────────────────────────────
 
-function UploadZone({ onStart, disabled }) {
+function UploadZone({ onStart, disabled, uploadProgress }) {
   const [files, setFiles] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState(null);
@@ -588,22 +588,48 @@ function UploadZone({ onStart, disabled }) {
         </div>
       )}
 
+      {/* Upload progress bar — shown while uploading, disappears at 100% */}
+      {uploadProgress !== null && uploadProgress < 100 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{
+            display: "flex", justifyContent: "space-between",
+            alignItems: "baseline", marginBottom: 4,
+          }}>
+            <Mono size={10} color={C.muted}>UPLOADING</Mono>
+            <Mono size={11} color={C.accent}>{uploadProgress}%</Mono>
+          </div>
+          <div style={{
+            height: 5, background: `${C.border}66`,
+            borderRadius: 3, overflow: "hidden",
+          }}>
+            <div style={{
+              height: "100%", borderRadius: 3,
+              width: `${uploadProgress}%`,
+              background: C.accent,
+              transition: "width 0.2s ease",
+            }} />
+          </div>
+        </div>
+      )}
+
       {/* Submit */}
       <button
-        onClick={() => files.length && onStart(files)}
-        disabled={!files.length || disabled}
+        onClick={() => files.length && !uploadProgress && onStart(files)}
+        disabled={!files.length || disabled || uploadProgress !== null}
         style={{
           marginTop: 12, width: "100%", padding: "14px",
-          background: files.length && !disabled ? C.accent : C.border,
-          color: files.length && !disabled ? C.bg : C.muted,
+          background: files.length && !disabled && uploadProgress === null ? C.accent : C.border,
+          color: files.length && !disabled && uploadProgress === null ? C.bg : C.muted,
           border: "none", borderRadius: 4,
           fontFamily: "'DM Mono', monospace",
           fontSize: 13, fontWeight: 500, letterSpacing: "0.08em",
-          cursor: files.length && !disabled ? "pointer" : "not-allowed",
+          cursor: files.length && !disabled && uploadProgress === null ? "pointer" : "not-allowed",
           textTransform: "uppercase", transition: "all 0.2s",
         }}
       >
-        INITIATE PIPELINE ANALYSIS
+        {uploadProgress !== null && uploadProgress < 100
+          ? `UPLOADING… ${uploadProgress}%`
+          : "INITIATE PIPELINE ANALYSIS"}
       </button>
     </div>
   );
@@ -1109,6 +1135,7 @@ export default function App() {
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const pollRef = useRef(null);
 
   // Inject CSS + favicon once
@@ -1177,20 +1204,43 @@ export default function App() {
     }
   };
 
-  // Start from uploaded files
-  const startFromUpload = async (files) => {
-    setError(null); setJobData(null); setJobId(null); setCancelling(false);
+  // Start from uploaded files — uses XHR instead of fetch for upload progress events
+  const startFromUpload = (files) => {
+    setError(null); setJobData(null); setJobId(null);
+    setCancelling(false); setUploadProgress(0);
+
     const form = new FormData();
     files.forEach(f => form.append("scan", f));
-    try {
-      const res = await fetch(`${API}/upload`, { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setJobId(data.job_id);
-      setPolling(true);
-    } catch (e) {
-      setError(e.message);
-    }
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener("progress", e => {
+      if (e.lengthComputable)
+        setUploadProgress(Math.round((e.loaded / e.total) * 100));
+    });
+
+    xhr.addEventListener("load", () => {
+      setUploadProgress(null);
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 400) {
+          setError(data.error || "Upload failed.");
+        } else {
+          setJobId(data.job_id);
+          setPolling(true);
+        }
+      } catch {
+        setError("Unexpected server response.");
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      setUploadProgress(null);
+      setError("Upload failed — check your connection and try again.");
+    });
+
+    xhr.open("POST", `${API}/upload`);
+    xhr.send(form);
   };
 
   // Cancel running pipeline
@@ -1333,7 +1383,7 @@ export default function App() {
             <div style={{ padding: "20px" }}>
               {activeTab === "cases"
                 ? <CasePicker onSelect={startFromCase} disabled={isActive} />
-                : <UploadZone onStart={startFromUpload} disabled={isActive} />
+                : <UploadZone onStart={startFromUpload} disabled={isActive} uploadProgress={uploadProgress} />
               }
             </div>
           </div>
