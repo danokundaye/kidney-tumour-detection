@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const API = "http://localhost:5000";
+const API = "https://compact-cities-narrow-cooperative.trycloudflare.com";
 
 // File size threshold above which we warn the user (50MB)
 const LARGE_FILE_BYTES = 50 * 1024 * 1024;
