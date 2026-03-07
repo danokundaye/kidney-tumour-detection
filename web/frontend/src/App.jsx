@@ -82,6 +82,25 @@ const GLOBAL_CSS = `
 const IS_FIREFOX = typeof navigator !== "undefined" &&
   navigator.userAgent.toLowerCase().includes("firefox");
 
+// ── Hook: fetch image via blob to send ngrok header (img tags can't set headers) ─
+function useNgrokImage(url) {
+  const [blobUrl, setBlobUrl] = useState(null);
+  useEffect(() => {
+    if (!url) return;
+    let objectUrl = null;
+    fetch(url, { headers: NGROK_HEADERS })
+      .then(r => r.ok ? r.blob() : null)
+      .then(blob => {
+        if (!blob) return;
+        objectUrl = URL.createObjectURL(blob);
+        setBlobUrl(objectUrl);
+      })
+      .catch(() => { });
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [url]);
+  return blobUrl;
+}
+
 // ── Utility components ────────────────────────────────────────────────────────
 
 function Mono({ children, color, size = 12 }) {
@@ -879,12 +898,13 @@ const lbBtnStyle = {
 
 function ShapAnalysis({ jobId, result, shapStatus }) {
   const [lightbox, setLightbox] = useState(null);
+  const rawSrc = `${API}/image/${jobId}/stage4?t=${Date.now()}`;
+  const src = useNgrokImage(shapStatus === "complete" ? rawSrc : null);
   if (shapStatus !== "complete" || !result) return null;
 
   const zones = result.zones || [];
   const top3 = result.top3 || [];
   const written = result.written_summary || "";
-  const src = `${API}/image/${jobId}/stage4?t=${Date.now()}`;
 
   // Map zone names to 3x3 grid positions (row-major)
   const ZONE_ORDER = [
@@ -1043,6 +1063,35 @@ function ShapAnalysis({ jobId, result, shapStatus }) {
   );
 }
 
+// Sub-component so each image can call useNgrokImage hook independently
+function StageImage({ rawSrc, label, caption, onExpand }) {
+  const src = useNgrokImage(rawSrc);
+  return (
+    <div style={{
+      background: C.bg, border: `1px solid ${C.border}`,
+      borderRadius: 5, overflow: "hidden", cursor: "zoom-in",
+    }}
+      onClick={() => src && onExpand(src)}
+    >
+      <div style={{
+        width: "100%", aspectRatio: "1 / 1", background: "#08111A",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        overflow: "hidden",
+      }}>
+        {src
+          ? <img src={src} alt={label}
+            style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+          : <Spinner color={C.accent} size={20} />
+        }
+      </div>
+      <div style={{ padding: "8px 10px", borderTop: `1px solid ${C.border}` }}>
+        <Mono size={10} color={C.accent}>{label}</Mono>
+        <p style={{ color: C.muted, fontSize: 10, marginTop: 2, lineHeight: 1.4 }}>{caption}</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Image gallery ─────────────────────────────────────────────────────────────
 
 function ImageGallery({ jobId, isComplete }) {
@@ -1080,30 +1129,10 @@ function ImageGallery({ jobId, isComplete }) {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           {stages.map(({ key, label, caption }) => {
-            const src = `${API}/image/${jobId}/${key}?t=${Date.now()}`;
+            const rawSrc = `${API}/image/${jobId}/${key}?t=${Date.now()}`;
             return (
-              <div key={key} style={{
-                background: C.bg, border: `1px solid ${C.border}`,
-                borderRadius: 5, overflow: "hidden", cursor: "zoom-in",
-              }}
-                onClick={() => setLightbox({ src, label, caption })}
-              >
-                <div style={{
-                  width: "100%", aspectRatio: "1 / 1", background: "#08111A",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  overflow: "hidden",
-                }}>
-                  <img
-                    src={src} alt={label}
-                    style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-                    onError={e => { e.currentTarget.style.display = "none"; }}
-                  />
-                </div>
-                <div style={{ padding: "8px 10px", borderTop: `1px solid ${C.border}` }}>
-                  <Mono size={10} color={C.accent}>{label}</Mono>
-                  <p style={{ color: C.muted, fontSize: 10, marginTop: 2, lineHeight: 1.4 }}>{caption}</p>
-                </div>
-              </div>
+              <StageImage key={key} rawSrc={rawSrc} label={label} caption={caption}
+                onExpand={(src) => setLightbox({ src, label, caption })} />
             );
           })}
         </div>
