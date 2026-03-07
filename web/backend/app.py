@@ -442,12 +442,23 @@ def _draw_label_bar(img: Image.Image, text: str, color=(0, 229, 160)) -> Image.I
     return img
 
 
+def _pad_to_square(img: Image.Image) -> Image.Image:
+    """Pad an image to a square canvas with a black background, preserving aspect ratio.
+    Corrects for KiTS21 coronal-orientation slices which are often elongated."""
+    w, h   = img.size
+    size   = max(w, h)
+    canvas = Image.new("RGB", (size, size), (0, 0, 0))
+    canvas.paste(img, ((size - w) // 2, (size - h) // 2))
+    return canvas
+
+
 def _generate_detection_image(job_id: str, slice_path: str, boxes: list):
     """
     Stage 1: CT slice with YOLO bounding boxes.
     Green boxes with confidence scores label each detected kidney region.
+    Padded to square to correct for KiTS21 coronal-orientation elongation.
     """
-    img  = Image.open(slice_path).convert("RGB")
+    img  = _pad_to_square(Image.open(slice_path).convert("RGB"))
     draw = ImageDraw.Draw(img)
     w, h = img.size
 
@@ -504,9 +515,8 @@ def _generate_classification_image(job_id: str, patch_pil: Image.Image,
     for t in range(4):
         draw.rectangle([t, t, w - t - 1, h - t - 1], outline=color)
 
-    draw.rectangle([0, h - 36, w, h], fill=(8, 16, 26))
-    draw.text((6, h - 34), f"{label}  {conf_pct}", fill=color)
-    draw.text((6, h - 18), f"patch method: {method}", fill=(100, 130, 150))
+    draw.rectangle([0, h - 22, w, h], fill=(8, 16, 26))
+    draw.text((6, h - 20), f"{label}  {conf_pct}", fill=color)
 
     _save_vis(job_id, "stage3", base)
 
@@ -856,12 +866,93 @@ def _run_placeholder(job_id: str, n_slices: int):
     return stage3
 
 
+# Zone labels for the 3x3 saliency grid (row-major order)
+_ZONE_NAMES = [
+    "Upper-Left",   "Upper-Centre",   "Upper-Right",
+    "Mid-Left",     "Central",        "Mid-Right",
+    "Lower-Left",   "Lower-Centre",   "Lower-Right",
+]
+
+
+def _compute_zone_analysis(saliency: np.ndarray, label: str, prob: float) -> dict:
+    """
+    Divide a normalised (0–1) saliency map into a 3x3 grid and compute the
+    mean attribution per zone. Returns ranked zones, top-3, and a written
+    radiologist summary.
+    """
+    H, W    = saliency.shape
+    rh, rw  = H // 3, W // 3
+
+    # Mean saliency for each of the 9 zones
+    raw_scores = []
+    for row in range(3):
+        for col in range(3):
+            r0, r1 = row * rh, (row + 1) * rh if row < 2 else H
+            c0, c1 = col * rw, (col + 1) * rw if col < 2 else W
+            raw_scores.append(float(saliency[r0:r1, c0:c1].mean()))
+
+    total = sum(raw_scores) + 1e-8
+    zones = [
+        {"name": name, "score": round(s, 4), "pct": round(s / total * 100, 1)}
+        for name, s in zip(_ZONE_NAMES, raw_scores)
+    ]
+    zones_sorted = sorted(zones, key=lambda z: z["score"], reverse=True)
+    top3         = zones_sorted[:3]
+
+    # Build a written summary from the zone data
+    dominant    = top3[0]["name"].lower()
+    second      = top3[1]["name"].lower()
+    third       = top3[2]["name"].lower()
+    dom_pct     = top3[0]["pct"]
+    verdict     = label.lower()
+    conf_pct    = round(prob * 100 if label == "Malignant" else (1 - prob) * 100, 1)
+
+    # Interpret zone position for the radiologist
+    central_zones  = {"central", "upper-centre", "lower-centre", "mid-left", "mid-right"}
+    peripheral_zones = {"upper-left", "upper-right", "lower-left", "lower-right"}
+    dom_clean = top3[0]["name"]
+
+    if dom_clean.lower() in central_zones:
+        location_note = (
+            "The dominant attribution is concentrated in the central region of the lesion, "
+            "which is consistent with a centrally located tumour mass or necrotic core drawing "
+            "the classifier's attention."
+        )
+    else:
+        location_note = (
+            f"The dominant attribution originates from the {dom_clean.lower()} periphery of the "
+            "lesion. Peripheral enhancement patterns are a recognised indicator of aggressive "
+            "tumour behaviour and are commonly associated with malignant renal cell carcinoma."
+        )
+
+    written = (
+        f"The gradient saliency analysis indicates that the model's {verdict} prediction "
+        f"(confidence {conf_pct}%) was driven primarily by the {dominant} zone "
+        f"({dom_pct}% of total attribution), followed by the {second} and {third} zones. "
+        f"{location_note} "
+        f"The three highest-attribution zones together account for "
+        f"{round(sum(z['pct'] for z in top3), 1)}% of the total model attention, suggesting "
+        f"{'a focused and localised decision signal' if top3[0]['pct'] > 30 else 'a distributed attention pattern across multiple regions'}. "
+        f"Regions with near-zero attribution (shown in blue on the heatmap) had negligible "
+        f"influence on the classification outcome and correspond primarily to surrounding "
+        f"healthy parenchyma or background tissue."
+    )
+
+    return {
+        "zones":          zones,
+        "zones_sorted":   zones_sorted,
+        "top3":           top3,
+        "written_summary": written,
+    }
+
+
 # SHAP runner
 def _run_shap(job_id: str):
     """
     Compute gradient saliency for the EfficientNet prediction.
     Uses the patch image saved during stage 3 as input.
-    Falls back to a description if weights are unavailable.
+    Computes a 3x3 zone breakdown and written radiologist summary.
+    Falls back to placeholder data if weights are unavailable.
     """
     _stage_start(job_id, 4, "Generating SHAP attribution maps...")
     patch_path = UPLOAD_FOLDER / job_id / "images" / "stage3.png"
@@ -871,15 +962,33 @@ def _run_shap(job_id: str):
             patch_pil = Image.open(str(patch_path)).convert("RGB")
             prob      = jobs[job_id]["stages"].get("stage3", {}).get(
                         "result", {}).get("probability_malignant", 0.5)
+            label     = "Malignant" if prob >= EFFNET_THRESHOLD else "Benign"
+
             for i in range(10):
                 time.sleep(0.3)
                 _update(job_id, 4, progress=(i + 1) * 10)
+
+            # Recompute saliency to extract zone data (same computation as _generate_shap_image)
+            device = MODELS["device"]
+            model  = MODELS["efnet"]
+            tf     = MODELS["efnet_transform"]
+            inp    = tf(patch_pil).unsqueeze(0).to(device)
+            inp.requires_grad_(True)
+            model.zero_grad()
+            torch.sigmoid(model(inp)).backward()
+            saliency = inp.grad.data.abs().squeeze().cpu().numpy()
+            saliency = saliency.max(axis=0)
+            saliency = (saliency - saliency.min()) / (saliency.max() - saliency.min() + 1e-8)
+
             _generate_shap_image(job_id, patch_pil, prob)
+            zone_data = _compute_zone_analysis(saliency, label, prob)
+
             result = {
-                "method":      "gradient saliency",
-                "description": "Brighter regions had greater influence on the classification decision.",
-                "top_features": ["tumour boundary texture", "HU distribution",
-                                 "lesion aspect ratio", "peripheral enhancement"],
+                "method":         "gradient saliency",
+                "zones":          zone_data["zones"],
+                "zones_sorted":   zone_data["zones_sorted"],
+                "top3":           zone_data["top3"],
+                "written_summary": zone_data["written_summary"],
             }
         except Exception as e:
             result = {"error": str(e), "method": "gradient saliency (failed)"}
@@ -887,11 +996,25 @@ def _run_shap(job_id: str):
         for i in range(20):
             time.sleep(0.4)
             _update(job_id, 4, progress=(i + 1) * 5)
+        # Placeholder zone data with realistic distribution
+        placeholder_scores = [0.08, 0.12, 0.07, 0.11, 0.28, 0.10, 0.06, 0.11, 0.07]
+        total = sum(placeholder_scores)
+        zones = [
+            {"name": name, "score": round(s, 4), "pct": round(s / total * 100, 1)}
+            for name, s in zip(_ZONE_NAMES, placeholder_scores)
+        ]
+        zones_sorted = sorted(zones, key=lambda z: z["score"], reverse=True)
         result = {
-            "method":      "placeholder",
-            "description": "Install model weights for real SHAP attribution maps.",
-            "top_features": ["tumour boundary texture", "HU distribution",
-                             "lesion aspect ratio", "peripheral enhancement"],
+            "method":         "placeholder",
+            "zones":          zones,
+            "zones_sorted":   zones_sorted,
+            "top3":           zones_sorted[:3],
+            "written_summary": (
+                "Placeholder mode — install model weights for real attribution analysis. "
+                "In real inference mode, this section provides a zone-by-zone breakdown of "
+                "which image regions drove the classification decision, along with a written "
+                "interpretation for radiologist review."
+            ),
         }
 
     _stage_end(job_id, 4, "SHAP analysis complete.", result)

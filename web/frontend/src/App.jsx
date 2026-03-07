@@ -702,7 +702,7 @@ function SummaryPanel({ summary }) {
             ["U-Net", t.stage2_s],
             ["EffNet", t.stage3_s],
           ].filter(([, v]) => v != null).map(([label, val]) => (
-            <div key={label} style={{ display: "flex", gap: 5, alignItems: "center" }}>
+            <div key={label} style={{ display: "flex", gap: 5, alignItems: "baseline" }}>
               <Mono size={10}>{label}</Mono>
               <Mono size={11} color={C.accent}>{val}s</Mono>
             </div>
@@ -729,79 +729,353 @@ function SummaryPanel({ summary }) {
   );
 }
 
-function ImageGallery({ jobId, isComplete, shapStatus }) {
+function Lightbox({ src, label, caption, onClose }) {
+  const [scale, setScale] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [drag, setDrag] = useState(null);
+
+  // close on Escape
+  useEffect(() => {
+    const handler = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const handleWheel = e => {
+    e.preventDefault();
+    setScale(s => Math.min(8, Math.max(1, s - e.deltaY * 0.001)));
+  };
+
+  const handleMouseDown = e => {
+    if (scale <= 1) return;
+    setDrag({ startX: e.clientX - pos.x, startY: e.clientY - pos.y });
+  };
+
+  const handleMouseMove = e => {
+    if (!drag) return;
+    setPos({ x: e.clientX - drag.startX, y: e.clientY - drag.startY });
+  };
+
+  const handleMouseUp = () => setDrag(null);
+
+  const resetZoom = () => { setScale(1); setPos({ x: 0, y: 0 }); };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        background: "rgba(0,0,0,0.88)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >
+      {/* close button */}
+      <button
+        onClick={onClose}
+        style={{
+          position: "fixed", top: 18, right: 22,
+          background: "none", border: "none", color: "#fff",
+          fontSize: 26, cursor: "pointer", lineHeight: 1, zIndex: 10000,
+        }}
+      >✕</button>
+
+      {/* zoom controls */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "fixed", bottom: 22, left: "50%", transform: "translateX(-50%)",
+          display: "flex", gap: 10, alignItems: "center", zIndex: 10000,
+        }}
+      >
+        <button onClick={() => setScale(s => Math.min(8, s + 0.5))}
+          style={lbBtnStyle}>＋</button>
+        <span style={{ color: "#aaa", fontSize: 12, minWidth: 42, textAlign: "center" }}>
+          {Math.round(scale * 100)}%
+        </span>
+        <button onClick={() => setScale(s => Math.max(1, s - 0.5))}
+          style={lbBtnStyle}>－</button>
+        <button onClick={resetZoom} style={lbBtnStyle}>Reset</button>
+      </div>
+
+      {/* image */}
+      <div
+        onClick={e => e.stopPropagation()}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{
+          cursor: scale > 1 ? (drag ? "grabbing" : "grab") : "default",
+          userSelect: "none",
+        }}
+      >
+        <img
+          src={src}
+          alt={label}
+          style={{
+            maxWidth: "88vw", maxHeight: "82vh",
+            objectFit: "contain", display: "block",
+            transform: `scale(${scale}) translate(${pos.x / scale}px, ${pos.y / scale}px)`,
+            transformOrigin: "center center",
+            transition: drag ? "none" : "transform 0.1s ease",
+          }}
+          draggable={false}
+        />
+      </div>
+
+      {/* caption bar */}
+      <div style={{
+        position: "fixed", bottom: 62, left: "50%", transform: "translateX(-50%)",
+        background: "rgba(6,10,15,0.85)", borderRadius: 4, padding: "5px 14px",
+        pointerEvents: "none",
+      }}>
+        <Mono size={11} color={C.accent}>{label}</Mono>
+        <span style={{ color: "#666", fontSize: 10, marginLeft: 8 }}>{caption}</span>
+      </div>
+    </div>
+  );
+}
+
+const lbBtnStyle = {
+  background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+  color: "#fff", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 13,
+};
+
+// ── SHAP Analysis component ───────────────────────────────────────────────────
+
+function ShapAnalysis({ jobId, result, shapStatus }) {
+  const [lightbox, setLightbox] = useState(null);
+  if (shapStatus !== "complete" || !result) return null;
+
+  const zones = result.zones || [];
+  const top3 = result.top3 || [];
+  const written = result.written_summary || "";
+  const src = `${API}/image/${jobId}/stage4?t=${Date.now()}`;
+
+  // Map zone names to 3x3 grid positions (row-major)
+  const ZONE_ORDER = [
+    "Upper-Left", "Upper-Centre", "Upper-Right",
+    "Mid-Left", "Central", "Mid-Right",
+    "Lower-Left", "Lower-Centre", "Lower-Right",
+  ];
+  const zoneByName = Object.fromEntries(zones.map(z => [z.name, z]));
+  const maxScore = Math.max(...zones.map(z => z.score), 0.001);
+
+  // Colour interpolation: low = dark blue, high = warm red/orange
+  const zoneColor = score => {
+    const t = score / maxScore;
+    if (t < 0.33) return `rgba(0,100,200,${0.2 + t * 0.6})`;
+    if (t < 0.66) return `rgba(255,140,0,${0.3 + t * 0.5})`;
+    return `rgba(255,60,60,${0.5 + t * 0.5})`;
+  };
+
+  return (
+    <>
+      {lightbox && (
+        <Lightbox src={lightbox.src} label={lightbox.label}
+          caption={lightbox.caption} onClose={() => setLightbox(null)} />
+      )}
+
+      <div className="fade-up" style={{
+        background: C.surface, border: `1px solid ${C.accent}55`,
+        borderRadius: 6, padding: "18px 20px", marginTop: 16,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <span style={{ fontSize: 18 }}>◇</span>
+          <span style={{ color: C.white, fontWeight: 600, fontSize: 13 }}>
+            SHAP Attribution Analysis
+          </span>
+          <Mono size={10} color={C.muted}>— gradient saliency · EfficientNet-B0</Mono>
+        </div>
+
+        {/* Top row: saliency image + 3x3 zone grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 18 }}>
+
+          {/* Saliency image */}
+          <div style={{
+            background: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: 5, overflow: "hidden", cursor: "zoom-in",
+          }}
+            onClick={() => setLightbox({
+              src,
+              label: "Stage 4 — SHAP Saliency",
+              caption: "Gradient saliency — brighter = more influential",
+            })}
+          >
+            <div style={{
+              width: "100%", aspectRatio: "1 / 1", background: "#08111A",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <img src={src} alt="SHAP saliency"
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                onError={e => { e.currentTarget.style.display = "none"; }}
+              />
+            </div>
+            <div style={{ padding: "7px 10px", borderTop: `1px solid ${C.border}` }}>
+              <Mono size={10} color={C.accent}>Stage 4 — SHAP Saliency</Mono>
+              <p style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>
+                Blue = low influence · Red = high influence · Click to expand
+              </p>
+            </div>
+          </div>
+
+          {/* 3x3 zone grid */}
+          <div>
+            <Mono size={10} color={C.muted} style={{ marginBottom: 8, display: "block" }}>
+              ZONE ATTRIBUTION MAP
+            </Mono>
+            <div style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+              gap: 3, marginBottom: 12,
+            }}>
+              {ZONE_ORDER.map(name => {
+                const z = zoneByName[name] || { score: 0, pct: 0 };
+                const isTop = top3.some(t => t.name === name);
+                return (
+                  <div key={name} style={{
+                    background: zoneColor(z.score),
+                    border: `1px solid ${isTop ? C.warn : C.border}`,
+                    borderRadius: 3, padding: "6px 4px",
+                    textAlign: "center",
+                  }}>
+                    <div style={{
+                      color: "#fff", fontSize: 9,
+                      fontFamily: "'DM Mono', monospace", lineHeight: 1.3,
+                    }}>
+                      {name.replace("-", "\n")}
+                    </div>
+                    <div style={{
+                      color: isTop ? C.warn : C.text,
+                      fontSize: 11, fontFamily: "'DM Mono', monospace",
+                      fontWeight: isTop ? 700 : 400, marginTop: 3,
+                    }}>
+                      {z.pct}%
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <Mono size={9} color={C.muted}>
+              ◈ highlighted border = top-3 zone
+            </Mono>
+          </div>
+        </div>
+
+        {/* Top-3 bar chart */}
+        <div style={{
+          background: C.bg, border: `1px solid ${C.border}`,
+          borderRadius: 4, padding: "12px 14px", marginBottom: 16,
+        }}>
+          <Mono size={10} color={C.muted} style={{ display: "block", marginBottom: 10 }}>
+            TOP-3 CONTRIBUTING ZONES
+          </Mono>
+          {top3.map((z, i) => (
+            <div key={z.name} style={{ marginBottom: i < 2 ? 10 : 0 }}>
+              <div style={{
+                display: "flex", justifyContent: "space-between",
+                alignItems: "baseline", marginBottom: 4,
+              }}>
+                <Mono size={10}>{z.name}</Mono>
+                <Mono size={11} color={i === 0 ? C.warn : C.accent}>{z.pct}%</Mono>
+              </div>
+              <div style={{
+                height: 6, background: `${C.border}66`, borderRadius: 3, overflow: "hidden",
+              }}>
+                <div style={{
+                  height: "100%", borderRadius: 3,
+                  width: `${z.pct}%`,
+                  background: i === 0 ? C.warn : i === 1 ? C.accent : C.text,
+                  transition: "width 0.6s ease",
+                }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Written radiologist summary */}
+        <div style={{
+          background: `${C.accent}08`, border: `1px solid ${C.accent}22`,
+          borderRadius: 4, padding: "12px 14px",
+        }}>
+          <Mono size={10} color={C.accent} style={{ display: "block", marginBottom: 8 }}>
+            RADIOLOGIST INTERPRETATION
+          </Mono>
+          <p style={{ color: C.text, fontSize: 12, lineHeight: 1.8, margin: 0 }}>
+            {written}
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Image gallery ─────────────────────────────────────────────────────────────
+
+function ImageGallery({ jobId, isComplete }) {
   if (!isComplete) return null;
+  const [lightbox, setLightbox] = useState(null);
 
   const stages = [
     { key: "stage1", label: "Stage 1 — Detection", caption: "YOLO bounding boxes on representative CT slice" },
     { key: "stage2", label: "Stage 2 — Segmentation", caption: "U-Net predicted tumour region (red overlay)" },
     { key: "stage3", label: "Stage 3 — Classification", caption: "EfficientNet input patch with verdict" },
-    { key: "stage4", label: "Stage 4 — SHAP", caption: "Gradient saliency — brighter = more influential" },
   ];
 
   return (
-    <div className="fade-up" style={{
-      background: C.surface, border: `1px solid ${C.border}`,
-      borderRadius: 6, padding: "18px 20px", marginTop: 24,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-        <span style={{ fontSize: 18 }}>◈</span>
-        <span style={{ color: C.white, fontWeight: 600, fontSize: 13 }}>
-          Stage Visualisations
-        </span>
-        <Mono size={10} color={C.muted}>— representative slice per stage</Mono>
-      </div>
+    <>
+      {lightbox && (
+        <Lightbox
+          src={lightbox.src}
+          label={lightbox.label}
+          caption={lightbox.caption}
+          onClose={() => setLightbox(null)}
+        />
+      )}
 
-      <div style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr",
-        gap: 12,
+      <div className="fade-up" style={{
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 6, padding: "18px 20px", marginTop: 24,
       }}>
-        {stages.map(({ key, label, caption }) => {
-          const isShap = key === "stage4";
-          const available = isShap ? shapStatus === "complete" : true;
-          const src = `${API}/image/${jobId}/${key}?t=${Date.now()}`;
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <span style={{ fontSize: 18 }}>◈</span>
+          <span style={{ color: C.white, fontWeight: 600, fontSize: 13 }}>
+            Stage Visualisations
+          </span>
+          <Mono size={10} color={C.muted}>— click any image to expand and zoom</Mono>
+        </div>
 
-          return (
-            <div key={key} style={{
-              background: C.bg,
-              border: `1px solid ${available ? C.border : C.border + "55"}`,
-              borderRadius: 5, overflow: "hidden",
-              opacity: available ? 1 : 0.4,
-            }}>
-              {/* Image area */}
-              <div style={{
-                width: "100%", aspectRatio: "1 / 1",
-                background: "#08111A",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                overflow: "hidden",
-              }}>
-                {available ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          {stages.map(({ key, label, caption }) => {
+            const src = `${API}/image/${jobId}/${key}?t=${Date.now()}`;
+            return (
+              <div key={key} style={{
+                background: C.bg, border: `1px solid ${C.border}`,
+                borderRadius: 5, overflow: "hidden", cursor: "zoom-in",
+              }}
+                onClick={() => setLightbox({ src, label, caption })}
+              >
+                <div style={{
+                  width: "100%", aspectRatio: "1 / 1", background: "#08111A",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  overflow: "hidden",
+                }}>
                   <img
-                    src={src}
-                    alt={label}
+                    src={src} alt={label}
                     style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                     onError={e => { e.currentTarget.style.display = "none"; }}
                   />
-                ) : (
-                  <div style={{ textAlign: "center", padding: 16 }}>
-                    <div style={{ fontSize: 24, marginBottom: 6, opacity: 0.3 }}>◇</div>
-                    <Mono size={10} color={C.muted}>Run SHAP to generate</Mono>
-                  </div>
-                )}
+                </div>
+                <div style={{ padding: "8px 10px", borderTop: `1px solid ${C.border}` }}>
+                  <Mono size={10} color={C.accent}>{label}</Mono>
+                  <p style={{ color: C.muted, fontSize: 10, marginTop: 2, lineHeight: 1.4 }}>{caption}</p>
+                </div>
               </div>
-
-              {/* Label bar */}
-              <div style={{ padding: "8px 10px", borderTop: `1px solid ${C.border}` }}>
-                <Mono size={10} color={C.accent}>{label}</Mono>
-                <p style={{ color: C.muted, fontSize: 10, marginTop: 2, lineHeight: 1.4 }}>
-                  {caption}
-                </p>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1136,7 +1410,7 @@ export default function App() {
 
         {/* Image gallery — shown after summary, before SHAP */}
         {isComplete && (
-          <ImageGallery jobId={jobId} isComplete={isComplete} shapStatus={shapStatus} />
+          <ImageGallery jobId={jobId} isComplete={isComplete} />
         )}
 
         {/* SHAP card */}
@@ -1195,7 +1469,11 @@ export default function App() {
               </div>
             )}
             {shapStatus === "complete" && jobData?.stages?.stage4?.result && (
-              <MetricBlock result={jobData.stages.stage4.result} stageKey="stage4" />
+              <ShapAnalysis
+                jobId={jobId}
+                result={jobData.stages.stage4.result}
+                shapStatus={shapStatus}
+              />
             )}
           </div>
         )}
