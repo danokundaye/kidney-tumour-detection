@@ -588,15 +588,19 @@ function UploadZone({ onStart, disabled, uploadProgress }) {
         </div>
       )}
 
-      {/* Upload progress bar — shown while uploading, disappears at 100% */}
-      {uploadProgress !== null && uploadProgress < 100 && (
+      {/* Upload progress bar — shown while uploading or server is processing */}
+      {uploadProgress !== null && (
         <div style={{ marginTop: 12 }}>
           <div style={{
             display: "flex", justifyContent: "space-between",
             alignItems: "baseline", marginBottom: 4,
           }}>
-            <Mono size={10} color={C.muted}>UPLOADING</Mono>
-            <Mono size={11} color={C.accent}>{uploadProgress}%</Mono>
+            <Mono size={10} color={C.muted}>
+              {uploadProgress < 100 ? "UPLOADING" : "PROCESSING…"}
+            </Mono>
+            {uploadProgress < 100 && (
+              <Mono size={11} color={C.accent}>{uploadProgress}%</Mono>
+            )}
           </div>
           <div style={{
             height: 5, background: `${C.border}66`,
@@ -604,9 +608,10 @@ function UploadZone({ onStart, disabled, uploadProgress }) {
           }}>
             <div style={{
               height: "100%", borderRadius: 3,
-              width: `${uploadProgress}%`,
-              background: C.accent,
+              width: uploadProgress < 100 ? `${uploadProgress}%` : "100%",
+              background: uploadProgress < 100 ? C.accent : C.warn,
               transition: "width 0.2s ease",
+              animation: uploadProgress === 100 ? "pulse 1.2s ease infinite" : "none",
             }} />
           </div>
         </div>
@@ -627,8 +632,8 @@ function UploadZone({ onStart, disabled, uploadProgress }) {
           textTransform: "uppercase", transition: "all 0.2s",
         }}
       >
-        {uploadProgress !== null && uploadProgress < 100
-          ? `UPLOADING… ${uploadProgress}%`
+        {uploadProgress !== null
+          ? uploadProgress < 100 ? `UPLOADING… ${uploadProgress}%` : "PROCESSING…"
           : "INITIATE PIPELINE ANALYSIS"}
       </button>
     </div>
