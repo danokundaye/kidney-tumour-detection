@@ -1148,6 +1148,10 @@ def upload():
     if not files or not any(f.filename for f in files):
         return jsonify({"error": "No files received. Send files under the key 'scan'."}), 400
 
+    # Debug — log filenames to help diagnose format detection issues
+    for f in files[:5]:
+        print(f"  UPLOAD filename: {repr(f.filename)}", flush=True)
+
     fmt, nifti_file = _detect_upload_format(files)
     if fmt == "unknown":
         return jsonify({"error": (
@@ -1248,7 +1252,7 @@ def health():
 
 # Entry point
 if __name__ == "__main__":
-    print("  Kidney Tumour Pipeline — Demo Backend")
+    print("  Kidney Tumour Pipeline — Demo Backend") 
 
     print("\nLoading models...")
     _load_models()
